@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-<title>Meja Kerja</title>
+<title>SHG Management Dashboard</title>
 
 <!-- ---- PWA / "Add to Home Screen" penuh skrin di iOS ---- -->
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Meja Kerja" />
+<meta name="apple-mobile-web-app-title" content="SHG Dashboard" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#101826" />
-<meta name="description" content="Papan studio pengajaran — jadual, kelas ganti, ketidakhadiran & rekod pakaian dalam satu paparan." />
+<meta name="description" content="SHG Management Dashboard — jadual, kelas ganti, ketidakhadiran & rekod pakaian dalam satu paparan." />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -749,25 +749,39 @@ function Dashboard() {
         ].join(", "),
       }}
     >
-      {/* ---- Header studio: logotype + tagline ---- */}
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] backdrop-blur-md" style={{ backgroundColor: "rgba(16,24,38,0.85)" }}>
-        <div className="mx-auto max-w-3xl px-4 pt-5">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: "#2DD4BF22", color: "#5EEAD4" }}>
-              <PenTool size={16} strokeWidth={2} />
-            </div>
-            <div>
-              <h1
-                className="text-[22px] leading-none tracking-tight text-white"
-                style={{ fontFamily: "'Fraunces', Georgia, serif", fontStyle: "italic", fontWeight: 500 }}
-              >
-                Meja Kerja
-              </h1>
-              <p className="mt-0.5 text-[11.5px] tracking-wide text-white/40">Papan Studio Pengajaran — empat perkara, satu paparan</p>
-            </div>
+      {/* ---- Hero: latar gambar studio drafting dari Unsplash ---- */}
+      <div
+        className="relative flex min-h-[210px] flex-col justify-end bg-cover bg-center px-4 pb-6 pt-12 sm:min-h-[280px] sm:pb-8 sm:pt-16"
+        style={{
+          backgroundImage: [
+            "linear-gradient(180deg, rgba(16,24,38,0.35) 0%, rgba(16,24,38,0.55) 55%, #101826 100%)",
+            'url("https://images.unsplash.com/photo-1782290547018-8bb89b8edf07?q=80&w=1600&auto=format&fit=crop")',
+          ].join(", "),
+        }}
+      >
+        <div className="mx-auto flex w-full max-w-3xl items-end gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full backdrop-blur-sm sm:h-14 sm:w-14" style={{ backgroundColor: "#2DD4BF2E", color: "#5EEAD4" }}>
+            <PenTool size={22} strokeWidth={2} />
+          </div>
+          <div>
+            <h1
+              className="text-[30px] leading-none tracking-tight text-white drop-shadow-sm sm:text-[38px]"
+              style={{ fontFamily: "'Fraunces', Georgia, serif", fontStyle: "italic", fontWeight: 500 }}
+            >
+              SHG Management Dashboard
+            </h1>
+            <p className="mt-1.5 text-[12.5px] tracking-wide text-white/60 sm:text-[13px]">Papan Studio Pengajaran — empat perkara, satu paparan</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ---- Bar nav sticky: pil bahagian + tindakan ---- */}
+      <header className="sticky top-0 z-20 border-b border-white/[0.06] backdrop-blur-md" style={{ backgroundColor: "rgba(16,24,38,0.9)" }}>
+        <div className="mx-auto max-w-3xl px-4 pt-3">
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
             <button
               onClick={() => setShowRaw(true)}
-              className="ml-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[12px] font-semibold text-white/75 transition hover:bg-white/[0.12] hover:text-white"
+              className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[12px] font-semibold text-white/75 transition hover:bg-white/[0.12] hover:text-white"
             >
               <Eye size={13} /> Data Mentah
             </button>
@@ -779,7 +793,7 @@ function Dashboard() {
             </button>
           </div>
         </div>
-        <nav className="mx-auto mt-4 flex max-w-3xl gap-2 overflow-x-auto px-4 pb-4">
+        <nav className="mx-auto mt-3 flex max-w-3xl gap-2 overflow-x-auto px-4 pb-4">
           {NAV.map((n) => (
             <button
               key={n.id}
@@ -801,7 +815,7 @@ function Dashboard() {
       </main>
 
       <p className="mx-auto mt-10 max-w-3xl px-4 text-center text-[11px] tracking-wide text-white/25">
-        Meja Kerja · data disimpan secara peribadi pada peranti ini
+        SHG Management Dashboard · data disimpan secara peribadi pada peranti ini
       </p>
 
       {showRaw && (
