@@ -95,6 +95,17 @@ const ACCENTS = {
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+// ---- Tarikh tempatan (BUKAN UTC) ----
+// .toISOString() menukar ke UTC dan boleh anjak tarikh 1 hari untuk zon
+// waktu +ve seperti Malaysia (UTC+8). Fungsi ini kekalkan tarikh tempatan
+// sebenar (tahun-bulan-hari) tanpa penukaran zon waktu.
+function localDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 // ---- Eksport CSV (buka terus dalam Apple Numbers / Excel) ----
 function toCSV(headers, rows) {
   const esc = (v) => {
@@ -177,7 +188,7 @@ function weekStartOf(dateStr) {
   const d = new Date(`${dateStr}T00:00:00`);
   const offset = (d.getDay() + 6) % 7; // Isnin = 0
   d.setDate(d.getDate() - offset);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
 function weekLabel(weekStartStr) {
@@ -496,7 +507,7 @@ function KetidakhadiranSection({ items, setItems, error }) {
 // ---- Modul 4: Pakaian ----
 function PakaianSection({ items, setItems, error }) {
   const accent = ACCENTS.pakaian;
-  const todayLabel = new Date().toISOString().slice(0, 10);
+  const todayLabel = localDateStr(new Date());
   const [form, setForm] = useState({ tarikh: todayLabel, konteks: "Kuliah", pakaian: "", foto: null });
   const [uploading, setUploading] = useState(false);
   const [photoErr, setPhotoErr] = useState(null);
@@ -589,7 +600,7 @@ function PakaianSection({ items, setItems, error }) {
                   {HARI_SINGKAT.map((label, i) => {
                     const d = new Date(start);
                     d.setDate(start.getDate() + i);
-                    const dateStr = d.toISOString().slice(0, 10);
+                    const dateStr = localDateStr(d);
                     const dayItems = byDay[dateStr] || [];
                     const first = dayItems[0];
                     return (
