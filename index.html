@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Meja Kerja</title>
+
+<!-- ---- PWA / "Add to Home Screen" penuh skrin di iOS ---- -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Meja Kerja" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#101826" />
+<meta name="description" content="Papan studio pengajaran — jadual, kelas ganti, ketidakhadiran & rekod pakaian dalam satu paparan." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+
+<style>
+  html, body { background-color: #101826; -webkit-tap-highlight-color: transparent; }
+  /* Elak "bounce" scroll & pastikan rasa macam app bila dibuka standalone */
+  body { overscroll-behavior-y: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ============================================================
+// Storan: localStorage pelayar (peranti ini sahaja), meniru API
+// window.storage asal supaya kod komponen di bawah tak perlu ubah.
+// Melempar ralat bila kunci tiada — sama macam window.storage asal —
+// supaya try/catch dalam useCollection() berfungsi tanpa diubah.
+// ============================================================
+window.storage = {
+  async get(key) {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) throw new Error("Kunci tiada: " + key);
+    return { key, value: raw, shared: false };
+  },
+  async set(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+      return { key, value, shared: false };
+    } catch (e) {
+      return null;
+    }
+  },
+};
+
+// ============================================================
+// Set ikon SVG ringkas menggantikan lucide-react (tiada bundler
+// di sini, jadi ikon dilukis terus sebagai <svg> kecil).
+// ============================================================
+function IconBase({ size = 16, strokeWidth = 2, className, style, color, children }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"}
+      strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+      {children}
+    </svg>
+  );
+}
+const Calendar = (p) => <IconBase {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></IconBase>;
+const RefreshCw = (p) => <IconBase {...p}><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" /></IconBase>;
+const UserX = (p) => <IconBase {...p}><circle cx="9" cy="7" r="4" /><path d="M2 21v-2a7 7 0 0 1 7-7" /><path d="m17 8 5 5M22 8l-5 5" /></IconBase>;
+const Shirt = (p) => <IconBase {...p}><path d="M16 3l4 3-2 4-2-1v11H8V9L6 10 4 6l4-3 2 2h4z" /></IconBase>;
+const Plus = (p) => <IconBase {...p}><path d="M12 5v14M5 12h14" /></IconBase>;
+const X = (p) => <IconBase {...p}><path d="M18 6 6 18M6 6l12 12" /></IconBase>;
+const Check = (p) => <IconBase {...p}><path d="M20 6 9 17l-5-5" /></IconBase>;
+const PenTool = (p) => <IconBase {...p}><path d="m12 19 7-7 3 3-7 7-3-3z" /><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><circle cx="11" cy="11" r="2" /></IconBase>;
+const Download = (p) => <IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5M12 15V3" /></IconBase>;
+const Camera = (p) => <IconBase {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></IconBase>;
+const ImageIcon = (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></IconBase>;
+
+
+// ============================================================
+// IDENTITI: "MEJA KERJA" — papan studio pengajaran
+// Latar blueprint/grid kertas lukis (rujukan dunia Seni Visual /
+// Membentuk & Membuat Binaan) + kad "indeks" kertas warna gading
+// dengan tab label melekat macam label washi-tape di studio.
+// ============================================================
+
+const ACCENTS = {
+  jadual:  { deep: "#0B5E56", mid: "#0F8577", glow: "#2DD4BF", tint: "#EAF6F4" },
+  ganti:   { deep: "#92400E", mid: "#B45309", glow: "#F59E0B", tint: "#FBF1E4" },
+  hadir:   { deep: "#881337", mid: "#9F1239", glow: "#FB7185", tint: "#FBEBEE" },
+  pakaian: { deep: "#4C1D95", mid: "#6D28D9", glow: "#A78BFA", tint: "#F1ECFB" },
+};
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+// ---- Eksport CSV (buka terus dalam Apple Numbers / Excel) ----
+function toCSV(headers, rows) {
+  const esc = (v) => {
+    const s = (v ?? "").toString();
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [headers, ...rows].map((r) => r.map(esc).join(",")).join("\n");
+}
+
+function downloadCSV(filename, headers, rows) {
+  // BOM di depan memastikan Numbers/Excel baca aksara & koma dengan betul
+  const csv = "\uFEFF" + toCSV(headers, rows);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filename}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+const CSV_CONFIGS = {
+  jadual: {
+    filename: "meja-kerja-jadual",
+    headers: ["Jenis", "Kelas / Lokasi", "Hari", "Masa"],
+    map: (it) => [it.jenis, it.tajuk, it.hari, it.masa],
+  },
+  ganti: {
+    filename: "meja-kerja-kelas-ganti",
+    headers: ["Kelas / Kursus", "Tarikh Asal", "Sebab", "Tarikh Ganti", "Status"],
+    map: (it) => [it.kelasAsal, it.tarikhAsal, it.sebab, it.tarikhGanti, it.selesai ? "Selesai" : "Belum Selesai"],
+  },
+  hadir: {
+    filename: "meja-kerja-ketidakhadiran",
+    headers: ["Nama Pelajar", "Kelas", "Tarikh", "Sebab", "Status"],
+    map: (it) => [it.nama, it.kelas, it.tarikh, it.sebab, it.status],
+  },
+  pakaian: {
+    filename: "meja-kerja-rekod-pakaian",
+    headers: ["Tarikh", "Konteks", "Pakaian"],
+    map: (it) => [it.tarikh, it.konteks, it.pakaian],
+  },
+};
+
+// ---- Gambar pakaian: kecilkan & mampatkan sebelum disimpan ----
+// Ambil terus dari kamera iPhone (capture="environment"), lalu lukis
+// pada <canvas> pada resolusi kecil (maks ~200px) supaya storan
+// peribadi jimat ruang — cukup untuk kenal pasti pakaian, bukan foto
+// kualiti penuh.
+function resizeImageFile(file, maxDim = 200, quality = 0.55) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Gagal baca fail"));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Gagal muat gambar"));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxDim) { height = Math.round((height * maxDim) / width); width = maxDim; }
+        else if (height >= width && height > maxDim) { width = Math.round((width * maxDim) / height); height = maxDim; }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ---- Kumpulan mengikut minggu (Isnin–Ahad) untuk paparan pakaian ----
+const HARI_SINGKAT = ["Isn", "Sel", "Rab", "Kha", "Jum", "Sab", "Ahd"];
+
+function weekStartOf(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const offset = (d.getDay() + 6) % 7; // Isnin = 0
+  d.setDate(d.getDate() - offset);
+  return d.toISOString().slice(0, 10);
+}
+
+function weekLabel(weekStartStr) {
+  const start = new Date(`${weekStartStr}T00:00:00`);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const fmt = (d) => d.toLocaleDateString("ms-MY", { day: "numeric", month: "short" });
+  return `${fmt(start)} – ${fmt(end)}`;
+}
+
+function groupByWeek(items) {
+  const map = new Map();
+  for (const it of items) {
+    if (!it.tarikh) continue;
+    const key = weekStartOf(it.tarikh);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(it);
+  }
+  return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+}
+
+function useCollection(key) {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await window.storage.get(key, false);
+        if (!cancelled) setItems(res ? JSON.parse(res.value) : []);
+      } catch {
+        if (!cancelled) setItems([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [key]);
+
+  const persist = useCallback(async (next) => {
+    setItems(next);
+    try {
+      const res = await window.storage.set(key, JSON.stringify(next), false);
+      if (!res) setError("Gagal menyimpan. Cuba lagi.");
+      else setError(null);
+    } catch {
+      setError("Gagal menyimpan. Cuba lagi.");
+    }
+  }, [key]);
+
+  return { items, setItems: persist, error };
+}
+
+// ---- Kad "indeks studio" dengan tab label melekat ----
+function SectionShell({ id, accent, icon: Icon, tag, title, subtitle, count, onExport, children }) {
+  return (
+    <section id={id} className="relative scroll-mt-24 pt-5">
+      {/* Tab label - macam washi tape dipin di penjuru kad */}
+      <div
+        className="absolute left-5 top-0 z-10 flex -rotate-2 items-center gap-1.5 rounded-t-md px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm"
+        style={{ backgroundColor: accent.deep }}
+      >
+        <Icon size={12} strokeWidth={2.5} />
+        {tag}
+      </div>
+
+      <div
+        className="rounded-2xl rounded-tl-sm border border-black/[0.06] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.25)]"
+        style={{
+          backgroundColor: "#FBF8F1",
+          backgroundImage:
+            "repeating-linear-gradient(180deg, rgba(0,0,0,0.012) 0px, rgba(0,0,0,0.012) 1px, transparent 1px, transparent 26px)",
+        }}
+      >
+        <div className="flex items-center gap-3 px-5 pb-1 pt-6">
+          <div className="min-w-0 flex-1">
+            <h2
+              className="text-[17px] leading-tight tracking-tight"
+              style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 600, color: accent.deep }}
+            >
+              {title}
+            </h2>
+            <p className="mt-0.5 truncate text-[12px] text-black/45">{subtitle}</p>
+          </div>
+          {onExport && (
+            <button
+              onClick={onExport}
+              aria-label={`Eksport ${tag} ke CSV`}
+              title="Eksport ke CSV (buka dalam Numbers)"
+              className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-semibold transition hover:brightness-95"
+              style={{ backgroundColor: accent.tint, color: accent.deep }}
+            >
+              <Download size={12} strokeWidth={2.5} />
+            </button>
+          )}
+          {typeof count === "number" && (
+            <span
+              className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white"
+              style={{ backgroundColor: accent.mid }}
+            >
+              {count}
+            </span>
+          )}
+        </div>
+        <div className="p-5 pt-3">{children}</div>
+      </div>
+    </section>
+  );
+}
+
+function EmptyRow({ text }) {
+  return (
+    <p className="rounded-xl border border-dashed border-black/[0.08] px-3 py-4 text-center text-[12.5px] text-black/35">
+      {text}
+    </p>
+  );
+}
+
+function IconBtn({ onClick, children, label }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className="flex h-7 w-7 items-center justify-center rounded-full text-black/30 transition hover:bg-black/[0.06] hover:text-black/60"
+    >
+      {children}
+    </button>
+  );
+}
+
+const fieldCls = "rounded-lg border border-black/[0.09] bg-white px-2.5 py-2 text-[13px] text-black/80 outline-none transition focus:border-black/25";
+
+function AddBtn({ onClick, accent }) {
+  return (
+    <button
+      onClick={onClick}
+      className="mb-3 flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm transition active:scale-[0.98]"
+      style={{ backgroundColor: accent.mid }}
+    >
+      <Plus size={14} strokeWidth={2.5} /> Tambah
+    </button>
+  );
+}
+
+// ---- Modul 1: Jadual ----
+function JadualSection({ items, setItems, error }) {
+  const accent = ACCENTS.jadual;
+  const [form, setForm] = useState({ jenis: "Kuliah", tajuk: "", hari: "Isnin", masa: "" });
+
+  const add = () => {
+    if (!form.tajuk.trim()) return;
+    setItems([{ id: uid(), ...form }, ...(items || [])]);
+    setForm({ ...form, tajuk: "", masa: "" });
+  };
+  const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
+  const list = items || [];
+
+  return (
+    <SectionShell id="jadual" accent={accent} icon={Calendar} tag="Jadual"
+      title="Pergerakan Praktikum vs Jadual Pengajaran"
+      subtitle="Kuliah, kelas online & praktikum dalam satu senarai"
+      count={list.length}
+      onExport={() => downloadCSV(CSV_CONFIGS.jadual.filename, CSV_CONFIGS.jadual.headers, list.map(CSV_CONFIGS.jadual.map))}>
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <select value={form.jenis} onChange={(e) => setForm({ ...form, jenis: e.target.value })} className={fieldCls}>
+          <option>Kuliah</option>
+          <option>Kelas Online</option>
+          <option>Praktikum</option>
+          <option>Penilaian Praktikum</option>
+        </select>
+        <select value={form.hari} onChange={(e) => setForm({ ...form, hari: e.target.value })} className={fieldCls}>
+          {["Isnin","Selasa","Rabu","Khamis","Jumaat","Sabtu","Ahad"].map((h) => <option key={h}>{h}</option>)}
+        </select>
+        <input value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} placeholder="Masa (cth 9:00am)" className={fieldCls} />
+        <input value={form.tajuk} onChange={(e) => setForm({ ...form, tajuk: e.target.value })} placeholder="Kelas / lokasi" className={fieldCls} />
+      </div>
+      <AddBtn onClick={add} accent={accent} />
+      {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
+      {items === null ? (
+        <p className="text-[12.5px] text-black/35">Memuatkan…</p>
+      ) : list.length === 0 ? (
+        <EmptyRow text="Belum ada entri jadual." />
+      ) : (
+        <ul className="space-y-1.5">
+          {list.map((it) => (
+            <li key={it.id} className="flex items-center gap-3 rounded-xl bg-black/[0.02] px-3 py-2">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: accent.glow }} />
+              <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>{it.jenis}</span>
+              <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.tajuk}</span>
+              <span className="shrink-0 text-[12px] text-black/40">{it.hari}{it.masa ? `, ${it.masa}` : ""}</span>
+              <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionShell>
+  );
+}
+
+// ---- Modul 2: Kelas Ganti ----
+function GantiSection({ items, setItems, error }) {
+  const accent = ACCENTS.ganti;
+  const [form, setForm] = useState({ kelasAsal: "", tarikhAsal: "", sebab: "", tarikhGanti: "" });
+
+  const add = () => {
+    if (!form.kelasAsal.trim()) return;
+    setItems([{ id: uid(), ...form, selesai: false }, ...(items || [])]);
+    setForm({ kelasAsal: "", tarikhAsal: "", sebab: "", tarikhGanti: "" });
+  };
+  const toggle = (id) => setItems((items || []).map((i) => i.id === id ? { ...i, selesai: !i.selesai } : i));
+  const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
+  const list = items || [];
+
+  return (
+    <SectionShell id="ganti" accent={accent} icon={RefreshCw} tag="Ganti"
+      title="Kelas Ganti"
+      subtitle="Log kuliah tergendala & tarikh gantian"
+      count={list.filter((i) => !i.selesai).length}
+      onExport={() => downloadCSV(CSV_CONFIGS.ganti.filename, CSV_CONFIGS.ganti.headers, list.map(CSV_CONFIGS.ganti.map))}>
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <input value={form.kelasAsal} onChange={(e) => setForm({ ...form, kelasAsal: e.target.value })} placeholder="Kelas / kursus" className={fieldCls} />
+        <input value={form.tarikhAsal} onChange={(e) => setForm({ ...form, tarikhAsal: e.target.value })} placeholder="Tarikh asal" className={fieldCls} />
+        <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab tak jalan" className={fieldCls} />
+        <input value={form.tarikhGanti} onChange={(e) => setForm({ ...form, tarikhGanti: e.target.value })} placeholder="Tarikh ganti" className={fieldCls} />
+      </div>
+      <AddBtn onClick={add} accent={accent} />
+      {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
+      {items === null ? (
+        <p className="text-[12.5px] text-black/35">Memuatkan…</p>
+      ) : list.length === 0 ? (
+        <EmptyRow text="Tiada kelas ganti direkod." />
+      ) : (
+        <ul className="space-y-1.5">
+          {list.map((it) => (
+            <li key={it.id} className="flex items-center gap-3 rounded-xl bg-black/[0.02] px-3 py-2">
+              <button onClick={() => toggle(it.id)} aria-label="Tanda selesai"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition"
+                style={{ borderColor: it.selesai ? accent.mid : "rgba(0,0,0,0.15)", backgroundColor: it.selesai ? accent.mid : "transparent" }}>
+                {it.selesai && <Check size={12} color="white" />}
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className={`truncate text-[13px] ${it.selesai ? "text-black/30 line-through" : "text-black/80"}`}>{it.kelasAsal}</p>
+                <p className="truncate text-[11.5px] text-black/40">
+                  {it.tarikhAsal && `Asal: ${it.tarikhAsal}`}{it.sebab && ` · ${it.sebab}`}{it.tarikhGanti && ` · Ganti: ${it.tarikhGanti}`}
+                </p>
+              </div>
+              <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionShell>
+  );
+}
+
+// ---- Modul 3: Ketidakhadiran ----
+function KetidakhadiranSection({ items, setItems, error }) {
+  const accent = ACCENTS.hadir;
+  const [form, setForm] = useState({ nama: "", kelas: "", tarikh: "", sebab: "", status: "Belum Disahkan" });
+
+  const add = () => {
+    if (!form.nama.trim()) return;
+    setItems([{ id: uid(), ...form }, ...(items || [])]);
+    setForm({ nama: "", kelas: "", tarikh: "", sebab: "", status: "Belum Disahkan" });
+  };
+  const cycleStatus = (id) => {
+    const order = ["Belum Disahkan", "Disahkan", "Ditolak"];
+    setItems((items || []).map((i) => {
+      if (i.id !== id) return i;
+      return { ...i, status: order[(order.indexOf(i.status) + 1) % order.length] };
+    }));
+  };
+  const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
+  const list = items || [];
+  const statusColor = { "Belum Disahkan": "#B45309", "Disahkan": "#0B5E56", "Ditolak": "#9F1239" };
+
+  return (
+    <SectionShell id="ketidakhadiran" accent={accent} icon={UserX} tag="Ketidakhadiran"
+      title="Dokumen Ketidakhadiran Pelajar"
+      subtitle="Rekod pelajar tidak hadir & status pengesahan"
+      count={list.filter((i) => i.status === "Belum Disahkan").length}
+      onExport={() => downloadCSV(CSV_CONFIGS.hadir.filename, CSV_CONFIGS.hadir.headers, list.map(CSV_CONFIGS.hadir.map))}>
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <input value={form.nama} onChange={(e) => setForm({ ...form, nama: e.target.value })} placeholder="Nama pelajar" className={fieldCls} />
+        <input value={form.kelas} onChange={(e) => setForm({ ...form, kelas: e.target.value })} placeholder="Kelas" className={fieldCls} />
+        <input value={form.tarikh} onChange={(e) => setForm({ ...form, tarikh: e.target.value })} placeholder="Tarikh" className={fieldCls} />
+        <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab" className={`${fieldCls} sm:col-span-2`} />
+      </div>
+      <AddBtn onClick={add} accent={accent} />
+      {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
+      {items === null ? (
+        <p className="text-[12.5px] text-black/35">Memuatkan…</p>
+      ) : list.length === 0 ? (
+        <EmptyRow text="Tiada rekod ketidakhadiran." />
+      ) : (
+        <ul className="space-y-1.5">
+          {list.map((it) => (
+            <li key={it.id} className="flex items-center gap-3 rounded-xl bg-black/[0.02] px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] text-black/80">{it.nama} <span className="text-black/40">· {it.kelas}</span></p>
+                <p className="truncate text-[11.5px] text-black/40">{it.tarikh}{it.sebab && ` · ${it.sebab}`}</p>
+              </div>
+              <button onClick={() => cycleStatus(it.id)}
+                className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style={{ backgroundColor: "white", color: statusColor[it.status], border: `1px solid ${statusColor[it.status]}40` }}>
+                {it.status}
+              </button>
+              <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionShell>
+  );
+}
+
+// ---- Modul 4: Pakaian ----
+function PakaianSection({ items, setItems, error }) {
+  const accent = ACCENTS.pakaian;
+  const todayLabel = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({ tarikh: todayLabel, konteks: "Kuliah", pakaian: "", foto: null });
+  const [uploading, setUploading] = useState(false);
+  const [photoErr, setPhotoErr] = useState(null);
+  const fileInputRef = React.useRef(null);
+
+  const handlePhoto = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // benarkan pilih fail sama semula
+    if (!file) return;
+    setUploading(true);
+    setPhotoErr(null);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      setForm((f) => ({ ...f, foto: dataUrl }));
+    } catch {
+      setPhotoErr("Gagal proses gambar. Cuba lagi.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const add = () => {
+    if (!form.pakaian.trim()) return;
+    setItems([{ id: uid(), ...form }, ...(items || [])]);
+    setForm({ ...form, pakaian: "", foto: null });
+  };
+  const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
+  const list = items || [];
+  const weeks = groupByWeek(list);
+
+  return (
+    <SectionShell id="pakaian" accent={accent} icon={Shirt} tag="Pakaian"
+      title="Rekod Pakaian"
+      subtitle="Snap dari kamera — imej dikecilkan automatik untuk jimat ruang"
+      count={list.length}
+      onExport={() => downloadCSV(CSV_CONFIGS.pakaian.filename, CSV_CONFIGS.pakaian.headers, list.map(CSV_CONFIGS.pakaian.map))}>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input type="date" value={form.tarikh} onChange={(e) => setForm({ ...form, tarikh: e.target.value })} className={fieldCls} />
+        <select value={form.konteks} onChange={(e) => setForm({ ...form, konteks: e.target.value })} className={fieldCls}>
+          <option>Kuliah</option>
+          <option>Kelas Online</option>
+          <option>Praktikum</option>
+        </select>
+        <input value={form.pakaian} onChange={(e) => setForm({ ...form, pakaian: e.target.value })} placeholder="Deskripsi pakaian"
+          className={`${fieldCls} min-w-[9rem] flex-1`} />
+
+        <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-1.5 rounded-lg border border-black/[0.09] bg-white px-2.5 py-2 text-[12.5px] font-medium text-black/60 transition hover:bg-black/[0.03] disabled:opacity-50"
+        >
+          <Camera size={14} /> {uploading ? "Memproses…" : form.foto ? "Tukar" : "Ambil Gambar"}
+        </button>
+
+        {form.foto && (
+          <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-black/10">
+            <img src={form.foto} alt="Pratonton pakaian" className="h-full w-full object-cover" />
+            <button type="button" onClick={() => setForm((f) => ({ ...f, foto: null }))} aria-label="Buang gambar"
+              className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 transition hover:opacity-100">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+      {photoErr && <p className="mb-2 text-[12px] text-rose-600">{photoErr}</p>}
+
+      <AddBtn onClick={add} accent={accent} />
+      {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
+
+      {items === null ? (
+        <p className="text-[12.5px] text-black/35">Memuatkan…</p>
+      ) : list.length === 0 ? (
+        <EmptyRow text="Belum ada rekod pakaian." />
+      ) : (
+        <div className="space-y-5">
+          {weeks.map(([weekStart, weekItems]) => {
+            // Peta setiap hari (Isn–Ahd) minggu ini kepada entri, supaya
+            // hari-hari lain dalam minggu yang sama terus kelihatan.
+            const byDay = {};
+            for (const it of weekItems) byDay[it.tarikh] = byDay[it.tarikh] ? [...byDay[it.tarikh], it] : [it];
+            const start = new Date(`${weekStart}T00:00:00`);
+
+            return (
+              <div key={weekStart}>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/35">Minggu {weekLabel(weekStart)}</p>
+                <div className="mb-3 grid grid-cols-7 gap-1.5">
+                  {HARI_SINGKAT.map((label, i) => {
+                    const d = new Date(start);
+                    d.setDate(start.getDate() + i);
+                    const dateStr = d.toISOString().slice(0, 10);
+                    const dayItems = byDay[dateStr] || [];
+                    const first = dayItems[0];
+                    return (
+                      <div key={dateStr} className="text-center">
+                        <div
+                          className="mx-auto flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border sm:h-14 sm:w-14"
+                          style={{ borderColor: first ? `${accent.mid}55` : "rgba(0,0,0,0.06)", backgroundColor: first ? "white" : "rgba(0,0,0,0.02)" }}
+                        >
+                          {first?.foto ? (
+                            <img src={first.foto} alt={`Pakaian ${label}`} className="h-full w-full object-cover" />
+                          ) : first ? (
+                            <Shirt size={16} className="text-black/20" />
+                          ) : (
+                            <span className="text-black/15">·</span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-[10px] font-medium text-black/35">{label}</p>
+                        {dayItems.length > 1 && <p className="text-[9px] text-black/30">+{dayItems.length - 1}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <ul className="space-y-1.5">
+                  {weekItems.map((it) => (
+                    <li key={it.id} className="flex items-center gap-3 rounded-xl bg-black/[0.02] px-3 py-2">
+                      {it.foto ? (
+                        <img src={it.foto} alt="Pakaian" className="h-8 w-8 shrink-0 rounded-md object-cover" />
+                      ) : (
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-black/[0.03]">
+                          <ImageIcon size={13} className="text-black/20" />
+                        </div>
+                      )}
+                      <span className="w-20 shrink-0 text-[12px] text-black/40">{it.tarikh}</span>
+                      <span className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>{it.konteks}</span>
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.pakaian}</span>
+                      <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </SectionShell>
+  );
+}
+
+const NAV = [
+  { id: "jadual", label: "Jadual", accent: ACCENTS.jadual, icon: Calendar },
+  { id: "ganti", label: "Ganti", accent: ACCENTS.ganti, icon: RefreshCw },
+  { id: "ketidakhadiran", label: "Hadir", accent: ACCENTS.hadir, icon: UserX },
+  { id: "pakaian", label: "Pakaian", accent: ACCENTS.pakaian, icon: Shirt },
+];
+
+function Dashboard() {
+  const jadual = useCollection("jadual-items");
+  const ganti = useCollection("kelas-ganti");
+  const hadir = useCollection("ketidakhadiran");
+  const pakaian = useCollection("pakaian-log");
+
+  const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  const exportAll = () => {
+    const pairs = [
+      [jadual.items, "jadual"],
+      [ganti.items, "ganti"],
+      [hadir.items, "hadir"],
+      [pakaian.items, "pakaian"],
+    ];
+    // Sedikit jeda antara setiap muat turun supaya pelayar tidak sekat
+    // pop-up bila 4 fail dimuat turun serentak.
+    pairs.forEach(([items, key], i) => {
+      const cfg = CSV_CONFIGS[key];
+      setTimeout(() => downloadCSV(cfg.filename, cfg.headers, (items || []).map(cfg.map)), i * 350);
+    });
+  };
+
+  return (
+    <div
+      className="min-h-screen pb-16"
+      style={{
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        backgroundColor: "#101826",
+        backgroundImage: [
+          "radial-gradient(ellipse 900px 480px at 50% -10%, rgba(45,212,191,0.10), transparent 60%)",
+          "repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 1px, transparent 44px)",
+          "repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 1px, transparent 44px)",
+        ].join(", "),
+      }}
+    >
+      {/* ---- Header studio: logotype + tagline ---- */}
+      <header className="sticky top-0 z-20 border-b border-white/[0.06] backdrop-blur-md" style={{ backgroundColor: "rgba(16,24,38,0.85)" }}>
+        <div className="mx-auto max-w-3xl px-4 pt-5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: "#2DD4BF22", color: "#5EEAD4" }}>
+              <PenTool size={16} strokeWidth={2} />
+            </div>
+            <div>
+              <h1
+                className="text-[22px] leading-none tracking-tight text-white"
+                style={{ fontFamily: "'Fraunces', Georgia, serif", fontStyle: "italic", fontWeight: 500 }}
+              >
+                Meja Kerja
+              </h1>
+              <p className="mt-0.5 text-[11.5px] tracking-wide text-white/40">Papan Studio Pengajaran — empat perkara, satu paparan</p>
+            </div>
+            <button
+              onClick={exportAll}
+              className="ml-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[12px] font-semibold text-white/75 transition hover:bg-white/[0.12] hover:text-white"
+            >
+              <Download size={13} /> Eksport Semua
+            </button>
+          </div>
+        </div>
+        <nav className="mx-auto mt-4 flex max-w-3xl gap-2 overflow-x-auto px-4 pb-4">
+          {NAV.map((n) => (
+            <button
+              key={n.id}
+              onClick={() => scrollTo(n.id)}
+              className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition hover:brightness-110"
+              style={{ backgroundColor: `${n.accent.glow}1F`, color: n.accent.glow, border: `1px solid ${n.accent.glow}33` }}
+            >
+              <n.icon size={13} /> {n.label}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      <main className="mx-auto max-w-3xl space-y-8 px-4 pt-6">
+        <JadualSection items={jadual.items} setItems={jadual.setItems} error={jadual.error} />
+        <GantiSection items={ganti.items} setItems={ganti.setItems} error={ganti.error} />
+        <KetidakhadiranSection items={hadir.items} setItems={hadir.setItems} error={hadir.error} />
+        <PakaianSection items={pakaian.items} setItems={pakaian.setItems} error={pakaian.error} />
+      </main>
+
+      <p className="mx-auto mt-10 max-w-3xl px-4 text-center text-[11px] tracking-wide text-white/25">
+        Meja Kerja · data disimpan secara peribadi pada peranti ini
+      </p>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<Dashboard />);
+</script>
+</body>
+</html>
