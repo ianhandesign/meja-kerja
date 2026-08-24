@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="SHG Dashboard" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#101826" />
-<meta name="description" content="SHG Management Dashboard — jadual, kelas ganti, ketidakhadiran & rekod pakaian dalam satu paparan." />
+<meta name="description" content="SHG Management Dashboard — jadual, kelas ganti, ketidakhadiran, rekod pakaian & rumusan analisis dalam satu paparan." />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -76,6 +76,7 @@ const Camera = (p) => <IconBase {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1
 const ImageIcon = (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></IconBase>;
 const Eye = (p) => <IconBase {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></IconBase>;
 const Copy = (p) => <IconBase {...p}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></IconBase>;
+const BarChart3 = (p) => <IconBase {...p}><path d="M3 3v18h18" /><path d="M18 17V9M13 17V5M8 17v-3" /></IconBase>;
 
 
 // ============================================================
@@ -90,6 +91,7 @@ const ACCENTS = {
   ganti:   { deep: "#92400E", mid: "#B45309", glow: "#F59E0B", tint: "#FBF1E4" },
   hadir:   { deep: "#881337", mid: "#9F1239", glow: "#FB7185", tint: "#FBEBEE" },
   pakaian: { deep: "#4C1D95", mid: "#6D28D9", glow: "#A78BFA", tint: "#F1ECFB" },
+  rumusan: { deep: "#1E293B", mid: "#334155", glow: "#94A3B8", tint: "#F1F5F9" },
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -131,18 +133,18 @@ function downloadCSV(filename, headers, rows) {
 const CSV_CONFIGS = {
   jadual: {
     filename: "meja-kerja-jadual",
-    headers: ["Jenis", "Kelas / Lokasi", "Hari", "Masa"],
-    map: (it) => [it.jenis, it.tajuk, it.hari, it.masa],
+    headers: ["Jenis", "Kelas / Lokasi", "Hari", "Tarikh", "Masa"],
+    map: (it) => [it.jenis, it.tajuk, it.hari, it.tarikh, it.masa],
   },
   ganti: {
     filename: "meja-kerja-kelas-ganti",
-    headers: ["Kelas / Kursus", "Tarikh Asal", "Sebab", "Tarikh Ganti", "Status"],
-    map: (it) => [it.kelasAsal, it.tarikhAsal, it.sebab, it.tarikhGanti, it.selesai ? "Sudah Diganti" : "Belum Diganti"],
+    headers: ["Kelas / Kursus", "Tarikh Asal", "Masa Asal", "Sebab", "Tarikh Ganti", "Masa Ganti", "Status"],
+    map: (it) => [it.kelasAsal, it.tarikhAsal, it.masaAsal, it.sebab, it.tarikhGanti, it.masaGanti, it.selesai ? "Sudah Diganti" : "Belum Diganti"],
   },
   hadir: {
     filename: "meja-kerja-ketidakhadiran",
-    headers: ["Nama Pelajar", "Kelas", "Tarikh", "Sebab", "Status"],
-    map: (it) => [it.nama, it.kelas, it.tarikh, it.sebab, it.status],
+    headers: ["Nama Pelajar", "Kelas", "Tarikh", "Masa", "Sebab", "Status"],
+    map: (it) => [it.nama, it.kelas, it.tarikh, it.masa, it.sebab, it.status],
   },
   pakaian: {
     filename: "meja-kerja-rekod-pakaian",
@@ -334,12 +336,12 @@ function AddBtn({ onClick, accent }) {
 // ---- Modul 1: Jadual ----
 function JadualSection({ items, setItems, error }) {
   const accent = ACCENTS.jadual;
-  const [form, setForm] = useState({ jenis: "Kuliah", tajuk: "", hari: "Isnin", masa: "" });
+  const [form, setForm] = useState({ jenis: "Kuliah", tajuk: "", hari: "Isnin", tarikh: "", masa: "" });
 
   const add = () => {
     if (!form.tajuk.trim()) return;
     setItems([{ id: uid(), ...form }, ...(items || [])]);
-    setForm({ ...form, tajuk: "", masa: "" });
+    setForm({ ...form, tajuk: "", tarikh: "", masa: "" });
   };
   const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
   const list = items || [];
@@ -350,7 +352,7 @@ function JadualSection({ items, setItems, error }) {
       subtitle="Kuliah, kelas online & praktikum dalam satu senarai"
       count={list.length}
       onExport={() => downloadCSV(CSV_CONFIGS.jadual.filename, CSV_CONFIGS.jadual.headers, list.map(CSV_CONFIGS.jadual.map))}>
-      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <select value={form.jenis} onChange={(e) => setForm({ ...form, jenis: e.target.value })} className={fieldCls}>
           <option>Kuliah</option>
           <option>Kelas Online</option>
@@ -360,8 +362,9 @@ function JadualSection({ items, setItems, error }) {
         <select value={form.hari} onChange={(e) => setForm({ ...form, hari: e.target.value })} className={fieldCls}>
           {["Isnin","Selasa","Rabu","Khamis","Jumaat","Sabtu","Ahad"].map((h) => <option key={h}>{h}</option>)}
         </select>
-        <input value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} placeholder="Masa (cth 9:00am)" className={fieldCls} />
         <input value={form.tajuk} onChange={(e) => setForm({ ...form, tajuk: e.target.value })} placeholder="Kelas / lokasi" className={fieldCls} />
+        <input type="date" value={form.tarikh} onChange={(e) => setForm({ ...form, tarikh: e.target.value })} className={fieldCls} />
+        <input type="time" value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} className={`${fieldCls} col-span-2 sm:col-span-1`} />
       </div>
       <AddBtn onClick={add} accent={accent} />
       {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
@@ -376,7 +379,7 @@ function JadualSection({ items, setItems, error }) {
               <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: accent.glow }} />
               <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>{it.jenis}</span>
               <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.tajuk}</span>
-              <span className="shrink-0 text-[12px] text-black/40">{it.hari}{it.masa ? `, ${it.masa}` : ""}</span>
+              <span className="shrink-0 text-[12px] text-black/40">{it.hari}{it.tarikh ? ` · ${it.tarikh}` : ""}{it.masa ? `, ${it.masa}` : ""}</span>
               <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
             </li>
           ))}
@@ -389,19 +392,20 @@ function JadualSection({ items, setItems, error }) {
 // ---- Modul 2: Kelas Ganti ----
 function GantiSection({ items, setItems, error }) {
   const accent = ACCENTS.ganti;
-  const [form, setForm] = useState({ kelasAsal: "", tarikhAsal: "", sebab: "" });
-  const [askingId, setAskingId] = useState(null); // id item yang sedang diminta tarikh ganti
+  const [form, setForm] = useState({ kelasAsal: "", tarikhAsal: "", masaAsal: "", sebab: "" });
+  const [askingId, setAskingId] = useState(null); // id item yang sedang diminta tarikh & masa ganti
   const [dateDraft, setDateDraft] = useState("");
+  const [timeDraft, setTimeDraft] = useState("");
 
   const add = () => {
     if (!form.kelasAsal.trim()) return;
-    setItems([{ id: uid(), ...form, tarikhGanti: "", selesai: false }, ...(items || [])]);
-    setForm({ kelasAsal: "", tarikhAsal: "", sebab: "" });
+    setItems([{ id: uid(), ...form, tarikhGanti: "", masaGanti: "", selesai: false }, ...(items || [])]);
+    setForm({ kelasAsal: "", tarikhAsal: "", masaAsal: "", sebab: "" });
   };
   const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
   const list = items || [];
 
-  // Tekan status "Belum Diganti" -> minta tarikh dahulu sebelum tanda selesai.
+  // Tekan status "Belum Diganti" -> minta tarikh & masa dahulu sebelum tanda selesai.
   // Tekan status "Sudah Diganti" -> terus kembali ke belum (tiada perlu tanya apa-apa).
   const markPending = (it) => {
     if (it.selesai) {
@@ -410,15 +414,17 @@ function GantiSection({ items, setItems, error }) {
     }
     setAskingId(it.id);
     setDateDraft(it.tarikhGanti || localDateStr(new Date()));
+    setTimeDraft(it.masaGanti || "");
   };
 
   const confirmDate = (id) => {
     if (!dateDraft) return;
-    setItems(list.map((i) => (i.id === id ? { ...i, tarikhGanti: dateDraft, selesai: true } : i)));
+    setItems(list.map((i) => (i.id === id ? { ...i, tarikhGanti: dateDraft, masaGanti: timeDraft, selesai: true } : i)));
     setAskingId(null);
     setDateDraft("");
+    setTimeDraft("");
   };
-  const cancelAsk = () => { setAskingId(null); setDateDraft(""); };
+  const cancelAsk = () => { setAskingId(null); setDateDraft(""); setTimeDraft(""); };
 
   return (
     <SectionShell id="ganti" accent={accent} icon={RefreshCw} tag="Ganti"
@@ -426,10 +432,11 @@ function GantiSection({ items, setItems, error }) {
       subtitle="Log kuliah tergendala & status penggantian"
       count={list.filter((i) => !i.selesai).length}
       onExport={() => downloadCSV(CSV_CONFIGS.ganti.filename, CSV_CONFIGS.ganti.headers, list.map(CSV_CONFIGS.ganti.map))}>
-      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <input value={form.kelasAsal} onChange={(e) => setForm({ ...form, kelasAsal: e.target.value })} placeholder="Kelas / kursus" className={fieldCls} />
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <input value={form.kelasAsal} onChange={(e) => setForm({ ...form, kelasAsal: e.target.value })} placeholder="Kelas / kursus" className={`${fieldCls} col-span-2 sm:col-span-2`} />
         <input type="date" value={form.tarikhAsal} onChange={(e) => setForm({ ...form, tarikhAsal: e.target.value })} className={fieldCls} />
-        <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab tak jalan" className={`${fieldCls} col-span-2 sm:col-span-1`} />
+        <input type="time" value={form.masaAsal} onChange={(e) => setForm({ ...form, masaAsal: e.target.value })} className={fieldCls} />
+        <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab tak jalan" className={`${fieldCls} col-span-2 sm:col-span-4`} />
       </div>
       <AddBtn onClick={add} accent={accent} />
       {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
@@ -445,7 +452,8 @@ function GantiSection({ items, setItems, error }) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] text-black/80">{it.kelasAsal}</p>
                   <p className="truncate text-[11.5px] text-black/40">
-                    {it.tarikhAsal && `Asal: ${it.tarikhAsal}`}{it.sebab && ` · ${it.sebab}`}{it.selesai && it.tarikhGanti && ` · Ganti: ${it.tarikhGanti}`}
+                    {it.tarikhAsal && `Asal: ${it.tarikhAsal}`}{it.masaAsal && ` ${it.masaAsal}`}{it.sebab && ` · ${it.sebab}`}
+                    {it.selesai && it.tarikhGanti && ` · Ganti: ${it.tarikhGanti}`}{it.selesai && it.masaGanti && ` ${it.masaGanti}`}
                   </p>
                 </div>
                 <button
@@ -466,6 +474,8 @@ function GantiSection({ items, setItems, error }) {
                 <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-black/[0.06] bg-white px-2.5 py-2">
                   <span className="text-[11.5px] text-black/50">Bila kelas ini diganti?</span>
                   <input type="date" value={dateDraft} onChange={(e) => setDateDraft(e.target.value)}
+                    className="rounded-md border border-black/10 px-2 py-1 text-[12.5px]" />
+                  <input type="time" value={timeDraft} onChange={(e) => setTimeDraft(e.target.value)}
                     className="rounded-md border border-black/10 px-2 py-1 text-[12.5px]" />
                   <button onClick={() => confirmDate(it.id)}
                     className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold text-white"
@@ -488,12 +498,12 @@ function GantiSection({ items, setItems, error }) {
 // ---- Modul 3: Ketidakhadiran ----
 function KetidakhadiranSection({ items, setItems, error }) {
   const accent = ACCENTS.hadir;
-  const [form, setForm] = useState({ nama: "", kelas: "", tarikh: "", sebab: "", status: "Belum Disahkan" });
+  const [form, setForm] = useState({ nama: "", kelas: "", tarikh: "", masa: "", sebab: "", status: "Belum Disahkan" });
 
   const add = () => {
     if (!form.nama.trim()) return;
     setItems([{ id: uid(), ...form }, ...(items || [])]);
-    setForm({ nama: "", kelas: "", tarikh: "", sebab: "", status: "Belum Disahkan" });
+    setForm({ nama: "", kelas: "", tarikh: "", masa: "", sebab: "", status: "Belum Disahkan" });
   };
   const cycleStatus = (id) => {
     const order = ["Belum Disahkan", "Disahkan", "Ditolak"];
@@ -512,11 +522,12 @@ function KetidakhadiranSection({ items, setItems, error }) {
       subtitle="Rekod pelajar tidak hadir & status pengesahan"
       count={list.filter((i) => i.status === "Belum Disahkan").length}
       onExport={() => downloadCSV(CSV_CONFIGS.hadir.filename, CSV_CONFIGS.hadir.headers, list.map(CSV_CONFIGS.hadir.map))}>
-      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <input value={form.nama} onChange={(e) => setForm({ ...form, nama: e.target.value })} placeholder="Nama pelajar" className={fieldCls} />
         <input value={form.kelas} onChange={(e) => setForm({ ...form, kelas: e.target.value })} placeholder="Kelas" className={fieldCls} />
-        <input value={form.tarikh} onChange={(e) => setForm({ ...form, tarikh: e.target.value })} placeholder="Tarikh" className={fieldCls} />
-        <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab" className={`${fieldCls} sm:col-span-2`} />
+        <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab" className={fieldCls} />
+        <input type="date" value={form.tarikh} onChange={(e) => setForm({ ...form, tarikh: e.target.value })} className={fieldCls} />
+        <input type="time" value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} className={`${fieldCls} col-span-2 sm:col-span-2`} />
       </div>
       <AddBtn onClick={add} accent={accent} />
       {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
@@ -530,7 +541,7 @@ function KetidakhadiranSection({ items, setItems, error }) {
             <li key={it.id} className="flex items-center gap-3 rounded-xl bg-black/[0.02] px-3 py-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] text-black/80">{it.nama} <span className="text-black/40">· {it.kelas}</span></p>
-                <p className="truncate text-[11.5px] text-black/40">{it.tarikh}{it.sebab && ` · ${it.sebab}`}</p>
+                <p className="truncate text-[11.5px] text-black/40">{it.tarikh}{it.masa ? ` ${it.masa}` : ""}{it.sebab && ` · ${it.sebab}`}</p>
               </div>
               <button onClick={() => cycleStatus(it.id)}
                 className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
@@ -747,11 +758,122 @@ function RawDataModal({ groups, onClose }) {
   );
 }
 
+// ---- Bar statistik ringkas (tiada library carta — CSS sahaja) ----
+function StatBar({ label, count, total, color }) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-[12px] text-black/55">
+        <span>{label}</span>
+        <span className="font-medium text-black/70">{count} · {pct}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-black/[0.06]">
+        <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  );
+}
+
+// ---- Modul 5: Rumusan & Analisis ----
+function RumusanSection({ jadual, ganti, hadir, pakaian }) {
+  const accent = ACCENTS.rumusan;
+  const totalSemua = jadual.length + ganti.length + hadir.length + pakaian.length;
+
+  const jenisList = ["Kuliah", "Kelas Online", "Praktikum", "Penilaian Praktikum"];
+  const jadualByJenis = jenisList.map((j) => ({ label: j, count: jadual.filter((i) => i.jenis === j).length })).filter((j) => j.count > 0);
+
+  const gantiSudah = ganti.filter((i) => i.selesai).length;
+  const gantiBelum = ganti.length - gantiSudah;
+
+  const statusList = ["Belum Disahkan", "Disahkan", "Ditolak"];
+  const hadirByStatus = statusList.map((s) => ({ label: s, count: hadir.filter((i) => i.status === s).length }));
+
+  const absentCounts = {};
+  hadir.forEach((i) => { if (i.nama) absentCounts[i.nama] = (absentCounts[i.nama] || 0) + 1; });
+  const topAbsent = Object.entries(absentCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const tiles = [
+    { label: "Jumlah Jadual", val: jadual.length, a: ACCENTS.jadual },
+    { label: "Ganti Belum Selesai", val: gantiBelum, a: ACCENTS.ganti },
+    { label: "Hadir Belum Disahkan", val: hadir.filter((i) => i.status === "Belum Disahkan").length, a: ACCENTS.hadir },
+    { label: "Rekod Pakaian", val: pakaian.length, a: ACCENTS.pakaian },
+  ];
+
+  return (
+    <SectionShell id="rumusan" accent={accent} icon={BarChart3} tag="Rumusan"
+      title="Rumusan & Analisis"
+      subtitle="Gambaran keseluruhan semua data dalam satu paparan"
+      count={totalSemua}>
+      <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {tiles.map((s) => (
+          <div key={s.label} className="rounded-xl border border-black/[0.06] p-3" style={{ backgroundColor: s.a.tint }}>
+            <p className="text-[24px] leading-none" style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 600, color: s.a.deep }}>{s.val}</p>
+            <p className="mt-1 text-[11px] leading-snug text-black/45">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {totalSemua === 0 ? (
+        <EmptyRow text="Belum ada data untuk dianalisis." />
+      ) : (
+        <div className="space-y-5">
+          {ganti.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/35">Status Kelas Ganti</p>
+              <div className="space-y-2">
+                <StatBar label="Sudah Diganti" count={gantiSudah} total={ganti.length} color={ACCENTS.jadual.mid} />
+                <StatBar label="Belum Diganti" count={gantiBelum} total={ganti.length} color={ACCENTS.ganti.mid} />
+              </div>
+            </div>
+          )}
+
+          {hadir.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/35">Ketidakhadiran mengikut Status</p>
+              <div className="space-y-2">
+                {hadirByStatus.map((s) => (
+                  <StatBar key={s.label} label={s.label} count={s.count} total={hadir.length} color={ACCENTS.hadir.mid} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {jadualByJenis.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/35">Jadual mengikut Jenis</p>
+              <div className="space-y-2">
+                {jadualByJenis.map((j) => (
+                  <StatBar key={j.label} label={j.label} count={j.count} total={jadual.length} color={ACCENTS.jadual.mid} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {topAbsent.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/35">Pelajar Paling Kerap Tidak Hadir</p>
+              <ul className="space-y-1.5">
+                {topAbsent.map(([nama, count]) => (
+                  <li key={nama} className="flex items-center justify-between rounded-lg bg-black/[0.02] px-3 py-2 text-[13px]">
+                    <span className="truncate text-black/80">{nama}</span>
+                    <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" style={{ backgroundColor: ACCENTS.hadir.mid }}>{count}×</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </SectionShell>
+  );
+}
+
 const NAV = [
   { id: "jadual", label: "Jadual", accent: ACCENTS.jadual, icon: Calendar },
   { id: "ganti", label: "Ganti", accent: ACCENTS.ganti, icon: RefreshCw },
   { id: "ketidakhadiran", label: "Hadir", accent: ACCENTS.hadir, icon: UserX },
   { id: "pakaian", label: "Pakaian", accent: ACCENTS.pakaian, icon: Shirt },
+  { id: "rumusan", label: "Rumusan", accent: ACCENTS.rumusan, icon: BarChart3 },
 ];
 
 function Dashboard() {
@@ -854,6 +976,12 @@ function Dashboard() {
         <GantiSection items={ganti.items} setItems={ganti.setItems} error={ganti.error} />
         <KetidakhadiranSection items={hadir.items} setItems={hadir.setItems} error={hadir.error} />
         <PakaianSection items={pakaian.items} setItems={pakaian.setItems} error={pakaian.error} />
+        <RumusanSection
+          jadual={jadual.items || []}
+          ganti={ganti.items || []}
+          hadir={hadir.items || []}
+          pakaian={pakaian.items || []}
+        />
       </main>
 
       <p className="mx-auto mt-10 max-w-3xl px-4 text-center text-[11px] tracking-wide text-white/25">
