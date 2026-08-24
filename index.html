@@ -792,6 +792,21 @@ function RumusanSection({ jadual, ganti, hadir, pakaian }) {
   hadir.forEach((i) => { if (i.nama) absentCounts[i.nama] = (absentCounts[i.nama] || 0) + 1; });
   const topAbsent = Object.entries(absentCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
+  // ---- Analisis silang: Jadual + Ganti (hari mengajar sebenar) vs Pakaian ----
+  // "Hari mengajar" = tarikh jadual yang diisi, digabung dengan tarikh kelas
+  // ganti yang SUDAH selesai (bukan tarikh asal, sebab kelas asal tak jalan).
+  const teachingDates = new Set();
+  jadual.forEach((j) => { if (j.tarikh) teachingDates.add(j.tarikh); });
+  ganti.forEach((g) => { if (g.selesai && g.tarikhGanti) teachingDates.add(g.tarikhGanti); });
+  const teachingDatesArr = [...teachingDates].sort((a, b) => (a < b ? 1 : -1));
+
+  const pakaianDates = new Set(pakaian.map((p) => p.tarikh).filter(Boolean));
+  const liputanCount = teachingDatesArr.filter((d) => pakaianDates.has(d)).length;
+  const liputanMissing = teachingDatesArr.filter((d) => !pakaianDates.has(d));
+
+  const konteksList = ["Kuliah", "Kelas Online", "Praktikum"];
+  const pakaianByKonteks = konteksList.map((k) => ({ label: k, count: pakaian.filter((p) => p.konteks === k).length })).filter((k) => k.count > 0);
+
   const tiles = [
     { label: "Jumlah Jadual", val: jadual.length, a: ACCENTS.jadual },
     { label: "Ganti Belum Selesai", val: gantiBelum, a: ACCENTS.ganti },
@@ -844,6 +859,42 @@ function RumusanSection({ jadual, ganti, hadir, pakaian }) {
               <div className="space-y-2">
                 {jadualByJenis.map((j) => (
                   <StatBar key={j.label} label={j.label} count={j.count} total={jadual.length} color={ACCENTS.jadual.mid} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {teachingDatesArr.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/35">
+                Liputan Rekod Pakaian pada Hari Mengajar
+              </p>
+              <p className="mb-2 text-[11px] text-black/35">Jadual + kelas ganti yang sudah selesai, dipadankan dengan tarikh rekod pakaian</p>
+              <StatBar label="Hari mengajar ada rekod pakaian" count={liputanCount} total={teachingDatesArr.length} color={ACCENTS.pakaian.mid} />
+              {liputanMissing.length > 0 && (
+                <div className="mt-2.5">
+                  <p className="mb-1.5 text-[11px] text-black/40">Belum ada rekod pakaian pada:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {liputanMissing.slice(0, 8).map((d) => (
+                      <span key={d} className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ backgroundColor: ACCENTS.pakaian.tint, color: ACCENTS.pakaian.deep }}>
+                        {d}
+                      </span>
+                    ))}
+                    {liputanMissing.length > 8 && (
+                      <span className="self-center text-[11px] text-black/35">+{liputanMissing.length - 8} lagi</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {pakaianByKonteks.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/35">Rekod Pakaian mengikut Jenis Kelas</p>
+              <div className="space-y-2">
+                {pakaianByKonteks.map((k) => (
+                  <StatBar key={k.label} label={k.label} count={k.count} total={pakaian.length} color={ACCENTS.pakaian.mid} />
                 ))}
               </div>
             </div>
