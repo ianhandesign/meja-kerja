@@ -428,7 +428,7 @@ function GantiSection({ items, setItems, error }) {
       onExport={() => downloadCSV(CSV_CONFIGS.ganti.filename, CSV_CONFIGS.ganti.headers, list.map(CSV_CONFIGS.ganti.map))}>
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <input value={form.kelasAsal} onChange={(e) => setForm({ ...form, kelasAsal: e.target.value })} placeholder="Kelas / kursus" className={fieldCls} />
-        <input value={form.tarikhAsal} onChange={(e) => setForm({ ...form, tarikhAsal: e.target.value })} placeholder="Tarikh asal" className={fieldCls} />
+        <input type="date" value={form.tarikhAsal} onChange={(e) => setForm({ ...form, tarikhAsal: e.target.value })} className={fieldCls} />
         <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab tak jalan" className={`${fieldCls} col-span-2 sm:col-span-1`} />
       </div>
       <AddBtn onClick={add} accent={accent} />
