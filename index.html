@@ -77,6 +77,8 @@ const ImageIcon = (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="1
 const Eye = (p) => <IconBase {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></IconBase>;
 const Copy = (p) => <IconBase {...p}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></IconBase>;
 const BarChart3 = (p) => <IconBase {...p}><path d="M3 3v18h18" /><path d="M18 17V9M13 17V5M8 17v-3" /></IconBase>;
+const Pencil = (p) => <IconBase {...p}><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></IconBase>;
+const Paperclip = (p) => <IconBase {...p}><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95L9.64 17.61a1.5 1.5 0 0 1-2.12-2.12l8.49-8.49" /></IconBase>;
 
 
 // ============================================================
@@ -143,8 +145,8 @@ const CSV_CONFIGS = {
   },
   hadir: {
     filename: "meja-kerja-ketidakhadiran",
-    headers: ["Nama Pelajar", "Kelas", "Tarikh", "Masa", "Sebab", "Status", "Catatan"],
-    map: (it) => [it.nama, it.kelas, it.tarikh, it.masa, it.sebab, it.status, it.catatan],
+    headers: ["Nama Pelajar", "Kelas", "Tarikh", "Masa", "Sebab", "Status", "Catatan", "Nama Dokumen"],
+    map: (it) => [it.nama, it.kelas, it.tarikh, it.masa, it.sebab, it.status, it.catatan, it.dokumenNama],
   },
   pakaian: {
     filename: "meja-kerja-rekod-pakaian",
@@ -178,6 +180,21 @@ function resizeImageFile(file, maxDim = 200, quality = 0.55) {
       };
       img.src = e.target.result;
     };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ---- Lampiran dokumen PDF (borang kebenaran, dsb.) ----
+// Disimpan sebagai base64 terus (PDF tak boleh dikecilkan macam gambar),
+// jadi dihadkan saiznya supaya tidak memenuhi storan peribadi yang
+// dikongsi oleh SEMUA rekod ketidakhadiran dalam satu kunci storan.
+const MAX_PDF_BYTES = 3 * 1024 * 1024; // 3MB
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Gagal baca fail"));
+    reader.onload = () => resolve(reader.result);
     reader.readAsDataURL(file);
   });
 }
@@ -502,14 +519,38 @@ function GantiSection({ items, setItems, error }) {
 }
 
 // ---- Modul 3: Ketidakhadiran ----
+const KETIDAKHADIRAN_KOSONG = { nama: "", kelas: "", tarikh: "", masa: "", sebab: "", status: "Belum Disahkan", catatan: "", dokumenPdf: null, dokumenNama: "" };
+
 function KetidakhadiranSection({ items, setItems, error }) {
   const accent = ACCENTS.hadir;
-  const [form, setForm] = useState({ nama: "", kelas: "", tarikh: "", masa: "", sebab: "", status: "Belum Disahkan", catatan: "" });
+  const [form, setForm] = useState(KETIDAKHADIRAN_KOSONG);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [pdfErr, setPdfErr] = useState(null);
+  const [pdfUploading, setPdfUploading] = useState(false);
+  const addFileRef = React.useRef(null);
+  const editFileRef = React.useRef(null);
+
+  const handlePdfFile = async (file, applyFn) => {
+    if (!file) return;
+    if (file.type !== "application/pdf") { setPdfErr("Hanya fail PDF dibenarkan."); return; }
+    if (file.size > MAX_PDF_BYTES) { setPdfErr("Fail melebihi 3MB — guna PDF lebih kecil (cuba imbas resolusi rendah)."); return; }
+    setPdfErr(null);
+    setPdfUploading(true);
+    try {
+      const dataUrl = await readFileAsDataURL(file);
+      applyFn(dataUrl, file.name);
+    } catch {
+      setPdfErr("Gagal muat naik fail.");
+    } finally {
+      setPdfUploading(false);
+    }
+  };
 
   const add = () => {
     if (!form.nama.trim()) return;
     setItems([{ id: uid(), ...form }, ...(items || [])]);
-    setForm({ nama: "", kelas: "", tarikh: "", masa: "", sebab: "", status: "Belum Disahkan", catatan: "" });
+    setForm(KETIDAKHADIRAN_KOSONG);
   };
   const cycleStatus = (id) => {
     const order = ["Belum Disahkan", "Disahkan", "Ditolak"];
@@ -522,10 +563,19 @@ function KetidakhadiranSection({ items, setItems, error }) {
   const list = items || [];
   const statusColor = { "Belum Disahkan": "#B45309", "Disahkan": "#0B5E56", "Ditolak": "#9F1239" };
 
+  const startEdit = (it) => { setEditingId(it.id); setEditForm({ ...it }); setPdfErr(null); };
+  const cancelEdit = () => { setEditingId(null); setEditForm(null); setPdfErr(null); };
+  const saveEdit = () => {
+    if (!editForm.nama.trim()) return;
+    setItems(list.map((i) => (i.id === editingId ? { ...editForm } : i)));
+    setEditingId(null);
+    setEditForm(null);
+  };
+
   return (
     <SectionShell id="ketidakhadiran" accent={accent} icon={UserX} tag="Ketidakhadiran"
       title="Dokumen Ketidakhadiran Pelajar"
-      subtitle="Rekod pelajar tidak hadir & status pengesahan"
+      subtitle="Rekod pelajar tidak hadir, status pengesahan & lampiran borang"
       count={list.filter((i) => i.status === "Belum Disahkan").length}
       onExport={() => downloadCSV(CSV_CONFIGS.hadir.filename, CSV_CONFIGS.hadir.headers, list.map(CSV_CONFIGS.hadir.map))}>
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -536,6 +586,25 @@ function KetidakhadiranSection({ items, setItems, error }) {
         <input type="time" value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} className={fieldCls} />
         <input value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={fieldCls} />
       </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input ref={addFileRef} type="file" accept="application/pdf" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handlePdfFile(f, (dataUrl, name) => setForm((p) => ({ ...p, dokumenPdf: dataUrl, dokumenNama: name }))); }} />
+        <button type="button" onClick={() => addFileRef.current?.click()} disabled={pdfUploading}
+          className="flex items-center gap-1.5 rounded-lg border border-black/[0.09] bg-white px-2.5 py-2 text-[12.5px] font-medium text-black/60 transition hover:bg-black/[0.03] disabled:opacity-50">
+          <Paperclip size={14} /> {pdfUploading ? "Memuat naik…" : form.dokumenPdf ? "Tukar PDF" : "Lampir Borang PDF (pilihan)"}
+        </button>
+        {form.dokumenPdf && (
+          <span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px]" style={{ backgroundColor: accent.tint, color: accent.deep }}>
+            📄 {form.dokumenNama}
+            <button type="button" onClick={() => setForm((p) => ({ ...p, dokumenPdf: null, dokumenNama: "" }))} aria-label="Buang PDF" className="text-black/30 hover:text-black/60">
+              <X size={12} />
+            </button>
+          </span>
+        )}
+      </div>
+      {pdfErr && <p className="mb-2 text-[12px] text-rose-600">{pdfErr}</p>}
+
       <AddBtn onClick={add} accent={accent} />
       {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
       {items === null ? (
@@ -544,23 +613,73 @@ function KetidakhadiranSection({ items, setItems, error }) {
         <EmptyRow text="Tiada rekod ketidakhadiran." />
       ) : (
         <ul className="space-y-1.5">
-          {list.map((it) => (
-            <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
-              <div className="flex items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] text-black/80">{it.nama} <span className="text-black/40">· {it.kelas}</span></p>
-                  <p className="truncate text-[11.5px] text-black/40">{it.tarikh}{it.masa ? ` ${it.masa}` : ""}{it.sebab && ` · ${it.sebab}`}</p>
+          {list.map((it) =>
+            editingId === it.id ? (
+              <li key={it.id} className="rounded-xl border border-black/[0.08] bg-white px-3 py-3">
+                <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <input value={editForm.nama} onChange={(e) => setEditForm({ ...editForm, nama: e.target.value })} placeholder="Nama pelajar" className={fieldCls} />
+                  <input value={editForm.kelas} onChange={(e) => setEditForm({ ...editForm, kelas: e.target.value })} placeholder="Kelas" className={fieldCls} />
+                  <input value={editForm.sebab} onChange={(e) => setEditForm({ ...editForm, sebab: e.target.value })} placeholder="Sebab" className={fieldCls} />
+                  <input type="date" value={editForm.tarikh} onChange={(e) => setEditForm({ ...editForm, tarikh: e.target.value })} className={fieldCls} />
+                  <input type="time" value={editForm.masa} onChange={(e) => setEditForm({ ...editForm, masa: e.target.value })} className={fieldCls} />
+                  <input value={editForm.catatan} onChange={(e) => setEditForm({ ...editForm, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={fieldCls} />
                 </div>
-                <button onClick={() => cycleStatus(it.id)}
-                  className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ backgroundColor: "white", color: statusColor[it.status], border: `1px solid ${statusColor[it.status]}40` }}>
-                  {it.status}
-                </button>
-                <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
-              </div>
-              {it.catatan && <p className="mt-1 text-[12px] italic text-black/40">📝 {it.catatan}</p>}
-            </li>
-          ))}
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <input ref={editFileRef} type="file" accept="application/pdf" className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handlePdfFile(f, (dataUrl, name) => setEditForm((p) => ({ ...p, dokumenPdf: dataUrl, dokumenNama: name }))); }} />
+                  <button type="button" onClick={() => editFileRef.current?.click()} disabled={pdfUploading}
+                    className="flex items-center gap-1.5 rounded-lg border border-black/[0.09] bg-white px-2.5 py-2 text-[12.5px] font-medium text-black/60 transition hover:bg-black/[0.03] disabled:opacity-50">
+                    <Paperclip size={14} /> {pdfUploading ? "Memuat naik…" : editForm.dokumenPdf ? "Tukar PDF" : "Lampir Borang PDF"}
+                  </button>
+                  {editForm.dokumenPdf && (
+                    <span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px]" style={{ backgroundColor: accent.tint, color: accent.deep }}>
+                      📄 {editForm.dokumenNama}
+                      <button type="button" onClick={() => setEditForm((p) => ({ ...p, dokumenPdf: null, dokumenNama: "" }))} aria-label="Buang PDF" className="text-black/30 hover:text-black/60">
+                        <X size={12} />
+                      </button>
+                    </span>
+                  )}
+                </div>
+                {pdfErr && <p className="mb-2 text-[12px] text-rose-600">{pdfErr}</p>}
+                <div className="flex items-center gap-2">
+                  <button onClick={saveEdit} className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-white" style={{ backgroundColor: accent.mid }}>
+                    Simpan
+                  </button>
+                  <button onClick={cancelEdit} className="rounded-full px-3 py-1.5 text-[12px] font-medium text-black/40 hover:bg-black/5">
+                    Batal
+                  </button>
+                </div>
+              </li>
+            ) : (
+              <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] text-black/80">{it.nama} <span className="text-black/40">· {it.kelas}</span></p>
+                    <p className="truncate text-[11.5px] text-black/40">{it.tarikh}{it.masa ? ` ${it.masa}` : ""}{it.sebab && ` · ${it.sebab}`}</p>
+                  </div>
+                  <button onClick={() => cycleStatus(it.id)}
+                    className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                    style={{ backgroundColor: "white", color: statusColor[it.status], border: `1px solid ${statusColor[it.status]}40` }}>
+                    {it.status}
+                  </button>
+                  <IconBtn onClick={() => startEdit(it)} label="Edit"><Pencil size={13} /></IconBtn>
+                  <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+                </div>
+                {(it.catatan || it.dokumenPdf) && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-0.5">
+                    {it.catatan && <p className="text-[12px] italic text-black/40">📝 {it.catatan}</p>}
+                    {it.dokumenPdf && (
+                      <a href={it.dokumenPdf} download={it.dokumenNama || "dokumen.pdf"}
+                        className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                        style={{ backgroundColor: accent.tint, color: accent.deep }}>
+                        <Download size={11} /> {it.dokumenNama || "dokumen.pdf"}
+                      </a>
+                    )}
+                  </div>
+                )}
+              </li>
+            )
+          )}
         </ul>
       )}
     </SectionShell>
