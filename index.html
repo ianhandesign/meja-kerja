@@ -70,7 +70,6 @@ const UserX = (p) => <IconBase {...p}><circle cx="9" cy="7" r="4" /><path d="M2 
 const Shirt = (p) => <IconBase {...p}><path d="M16 3l4 3-2 4-2-1v11H8V9L6 10 4 6l4-3 2 2h4z" /></IconBase>;
 const Plus = (p) => <IconBase {...p}><path d="M12 5v14M5 12h14" /></IconBase>;
 const X = (p) => <IconBase {...p}><path d="M18 6 6 18M6 6l12 12" /></IconBase>;
-const Check = (p) => <IconBase {...p}><path d="M20 6 9 17l-5-5" /></IconBase>;
 const PenTool = (p) => <IconBase {...p}><path d="m12 19 7-7 3 3-7 7-3-3z" /><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><circle cx="11" cy="11" r="2" /></IconBase>;
 const Download = (p) => <IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5M12 15V3" /></IconBase>;
 const Camera = (p) => <IconBase {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></IconBase>;
@@ -138,7 +137,7 @@ const CSV_CONFIGS = {
   ganti: {
     filename: "meja-kerja-kelas-ganti",
     headers: ["Kelas / Kursus", "Tarikh Asal", "Sebab", "Tarikh Ganti", "Status"],
-    map: (it) => [it.kelasAsal, it.tarikhAsal, it.sebab, it.tarikhGanti, it.selesai ? "Selesai" : "Belum Selesai"],
+    map: (it) => [it.kelasAsal, it.tarikhAsal, it.sebab, it.tarikhGanti, it.selesai ? "Sudah Diganti" : "Belum Diganti"],
   },
   hadir: {
     filename: "meja-kerja-ketidakhadiran",
@@ -390,28 +389,47 @@ function JadualSection({ items, setItems, error }) {
 // ---- Modul 2: Kelas Ganti ----
 function GantiSection({ items, setItems, error }) {
   const accent = ACCENTS.ganti;
-  const [form, setForm] = useState({ kelasAsal: "", tarikhAsal: "", sebab: "", tarikhGanti: "" });
+  const [form, setForm] = useState({ kelasAsal: "", tarikhAsal: "", sebab: "" });
+  const [askingId, setAskingId] = useState(null); // id item yang sedang diminta tarikh ganti
+  const [dateDraft, setDateDraft] = useState("");
 
   const add = () => {
     if (!form.kelasAsal.trim()) return;
-    setItems([{ id: uid(), ...form, selesai: false }, ...(items || [])]);
-    setForm({ kelasAsal: "", tarikhAsal: "", sebab: "", tarikhGanti: "" });
+    setItems([{ id: uid(), ...form, tarikhGanti: "", selesai: false }, ...(items || [])]);
+    setForm({ kelasAsal: "", tarikhAsal: "", sebab: "" });
   };
-  const toggle = (id) => setItems((items || []).map((i) => i.id === id ? { ...i, selesai: !i.selesai } : i));
   const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
   const list = items || [];
+
+  // Tekan status "Belum Diganti" -> minta tarikh dahulu sebelum tanda selesai.
+  // Tekan status "Sudah Diganti" -> terus kembali ke belum (tiada perlu tanya apa-apa).
+  const markPending = (it) => {
+    if (it.selesai) {
+      setItems(list.map((i) => (i.id === it.id ? { ...i, selesai: false } : i)));
+      return;
+    }
+    setAskingId(it.id);
+    setDateDraft(it.tarikhGanti || localDateStr(new Date()));
+  };
+
+  const confirmDate = (id) => {
+    if (!dateDraft) return;
+    setItems(list.map((i) => (i.id === id ? { ...i, tarikhGanti: dateDraft, selesai: true } : i)));
+    setAskingId(null);
+    setDateDraft("");
+  };
+  const cancelAsk = () => { setAskingId(null); setDateDraft(""); };
 
   return (
     <SectionShell id="ganti" accent={accent} icon={RefreshCw} tag="Ganti"
       title="Kelas Ganti"
-      subtitle="Log kuliah tergendala & tarikh gantian"
+      subtitle="Log kuliah tergendala & status penggantian"
       count={list.filter((i) => !i.selesai).length}
       onExport={() => downloadCSV(CSV_CONFIGS.ganti.filename, CSV_CONFIGS.ganti.headers, list.map(CSV_CONFIGS.ganti.map))}>
-      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <input value={form.kelasAsal} onChange={(e) => setForm({ ...form, kelasAsal: e.target.value })} placeholder="Kelas / kursus" className={fieldCls} />
         <input value={form.tarikhAsal} onChange={(e) => setForm({ ...form, tarikhAsal: e.target.value })} placeholder="Tarikh asal" className={fieldCls} />
-        <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab tak jalan" className={fieldCls} />
-        <input value={form.tarikhGanti} onChange={(e) => setForm({ ...form, tarikhGanti: e.target.value })} placeholder="Tarikh ganti" className={fieldCls} />
+        <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab tak jalan" className={`${fieldCls} col-span-2 sm:col-span-1`} />
       </div>
       <AddBtn onClick={add} accent={accent} />
       {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
@@ -422,19 +440,43 @@ function GantiSection({ items, setItems, error }) {
       ) : (
         <ul className="space-y-1.5">
           {list.map((it) => (
-            <li key={it.id} className="flex items-center gap-3 rounded-xl bg-black/[0.02] px-3 py-2">
-              <button onClick={() => toggle(it.id)} aria-label="Tanda selesai"
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition"
-                style={{ borderColor: it.selesai ? accent.mid : "rgba(0,0,0,0.15)", backgroundColor: it.selesai ? accent.mid : "transparent" }}>
-                {it.selesai && <Check size={12} color="white" />}
-              </button>
-              <div className="min-w-0 flex-1">
-                <p className={`truncate text-[13px] ${it.selesai ? "text-black/30 line-through" : "text-black/80"}`}>{it.kelasAsal}</p>
-                <p className="truncate text-[11.5px] text-black/40">
-                  {it.tarikhAsal && `Asal: ${it.tarikhAsal}`}{it.sebab && ` · ${it.sebab}`}{it.tarikhGanti && ` · Ganti: ${it.tarikhGanti}`}
-                </p>
+            <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] text-black/80">{it.kelasAsal}</p>
+                  <p className="truncate text-[11.5px] text-black/40">
+                    {it.tarikhAsal && `Asal: ${it.tarikhAsal}`}{it.sebab && ` · ${it.sebab}`}{it.selesai && it.tarikhGanti && ` · Ganti: ${it.tarikhGanti}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => markPending(it)}
+                  className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition"
+                  style={{
+                    backgroundColor: "white",
+                    color: it.selesai ? "#0B5E56" : accent.mid,
+                    border: `1px solid ${it.selesai ? "#0B5E5640" : `${accent.mid}40`}`,
+                  }}
+                >
+                  {it.selesai ? "Sudah Diganti" : "Belum Diganti"}
+                </button>
+                <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
               </div>
-              <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+
+              {askingId === it.id && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-black/[0.06] bg-white px-2.5 py-2">
+                  <span className="text-[11.5px] text-black/50">Bila kelas ini diganti?</span>
+                  <input type="date" value={dateDraft} onChange={(e) => setDateDraft(e.target.value)}
+                    className="rounded-md border border-black/10 px-2 py-1 text-[12.5px]" />
+                  <button onClick={() => confirmDate(it.id)}
+                    className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold text-white"
+                    style={{ backgroundColor: accent.mid }}>
+                    Sahkan
+                  </button>
+                  <button onClick={cancelAsk} className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-black/40 hover:bg-black/5">
+                    Batal
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
