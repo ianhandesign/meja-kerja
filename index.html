@@ -804,6 +804,17 @@ function RumusanSection({ jadual, ganti, hadir, pakaian }) {
   const liputanCount = teachingDatesArr.filter((d) => pakaianDates.has(d)).length;
   const liputanMissing = teachingDatesArr.filter((d) => !pakaianDates.has(d));
 
+  // ---- Senarai gabungan: setiap hari mengajar (Jadual + Ganti) dipadankan
+  // TERUS dengan rekod pakaian pada tarikh yang sama — cth "18hb Kuliah ->
+  // pakaian apa" dan "19hb Kelas Ganti Online -> pakaian apa".
+  const pakaianByDate = {};
+  pakaian.forEach((p) => { if (p.tarikh) (pakaianByDate[p.tarikh] = pakaianByDate[p.tarikh] || []).push(p); });
+
+  const teachingEvents = [];
+  jadual.forEach((j) => { if (j.tarikh) teachingEvents.push({ id: `j-${j.id}`, tarikh: j.tarikh, jenis: j.jenis, tajuk: j.tajuk, masa: j.masa, isGanti: false }); });
+  ganti.forEach((g) => { if (g.selesai && g.tarikhGanti) teachingEvents.push({ id: `g-${g.id}`, tarikh: g.tarikhGanti, jenis: "Kelas Ganti", tajuk: g.kelasAsal, masa: g.masaGanti, isGanti: true }); });
+  teachingEvents.sort((a, b) => (a.tarikh < b.tarikh ? 1 : a.tarikh > b.tarikh ? -1 : 0));
+
   const konteksList = ["Kuliah", "Kelas Online", "Praktikum"];
   const pakaianByKonteks = konteksList.map((k) => ({ label: k, count: pakaian.filter((p) => p.konteks === k).length })).filter((k) => k.count > 0);
 
@@ -885,6 +896,37 @@ function RumusanSection({ jadual, ganti, hadir, pakaian }) {
                     )}
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {teachingEvents.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/35">Jadual & Kelas Ganti bersama Pakaian</p>
+              <p className="mb-2 text-[11px] text-black/35">Setiap hari mengajar dipadankan terus dengan pakaian pada tarikh yang sama</p>
+              <ul className="space-y-1.5">
+                {teachingEvents.slice(0, 12).map((ev) => {
+                  const matches = pakaianByDate[ev.tarikh] || [];
+                  return (
+                    <li key={ev.id} className="rounded-lg bg-black/[0.02] px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
+                        <span className="font-semibold" style={{ color: ev.isGanti ? ACCENTS.ganti.mid : ACCENTS.jadual.mid }}>{ev.tarikh}</span>
+                        <span className="text-black/25">·</span>
+                        <span className="truncate text-black/60">{ev.jenis}{ev.tajuk ? ` — ${ev.tajuk}` : ""}{ev.masa ? ` (${ev.masa})` : ""}</span>
+                      </div>
+                      <div className="mt-1 text-[12.5px]">
+                        {matches.length > 0 ? (
+                          <span className="text-black/80">👕 {matches.map((m) => m.pakaian).filter(Boolean).join(", ")}</span>
+                        ) : (
+                          <span className="italic text-black/30">Tiada rekod pakaian</span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              {teachingEvents.length > 12 && (
+                <p className="mt-2 text-[11px] text-black/35">+{teachingEvents.length - 12} entri lagi — guna "Eksport Semua" untuk senarai penuh</p>
               )}
             </div>
           )}
