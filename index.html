@@ -133,23 +133,23 @@ function downloadCSV(filename, headers, rows) {
 const CSV_CONFIGS = {
   jadual: {
     filename: "meja-kerja-jadual",
-    headers: ["Jenis", "Kelas / Lokasi", "Hari", "Tarikh", "Masa"],
-    map: (it) => [it.jenis, it.tajuk, it.hari, it.tarikh, it.masa],
+    headers: ["Jenis", "Kelas / Lokasi", "Hari", "Tarikh", "Masa", "Catatan"],
+    map: (it) => [it.jenis, it.tajuk, it.hari, it.tarikh, it.masa, it.catatan],
   },
   ganti: {
     filename: "meja-kerja-kelas-ganti",
-    headers: ["Kelas / Kursus", "Tarikh Asal", "Masa Asal", "Sebab", "Tarikh Ganti", "Masa Ganti", "Status"],
-    map: (it) => [it.kelasAsal, it.tarikhAsal, it.masaAsal, it.sebab, it.tarikhGanti, it.masaGanti, it.selesai ? "Sudah Diganti" : "Belum Diganti"],
+    headers: ["Kelas / Kursus", "Tarikh Asal", "Masa Asal", "Sebab", "Tarikh Ganti", "Masa Ganti", "Status", "Catatan"],
+    map: (it) => [it.kelasAsal, it.tarikhAsal, it.masaAsal, it.sebab, it.tarikhGanti, it.masaGanti, it.selesai ? "Sudah Diganti" : "Belum Diganti", it.catatan],
   },
   hadir: {
     filename: "meja-kerja-ketidakhadiran",
-    headers: ["Nama Pelajar", "Kelas", "Tarikh", "Masa", "Sebab", "Status"],
-    map: (it) => [it.nama, it.kelas, it.tarikh, it.masa, it.sebab, it.status],
+    headers: ["Nama Pelajar", "Kelas", "Tarikh", "Masa", "Sebab", "Status", "Catatan"],
+    map: (it) => [it.nama, it.kelas, it.tarikh, it.masa, it.sebab, it.status, it.catatan],
   },
   pakaian: {
     filename: "meja-kerja-rekod-pakaian",
-    headers: ["Tarikh", "Konteks", "Pakaian"],
-    map: (it) => [it.tarikh, it.konteks, it.pakaian],
+    headers: ["Tarikh", "Konteks", "Pakaian", "Catatan"],
+    map: (it) => [it.tarikh, it.konteks, it.pakaian, it.catatan],
   },
 };
 
@@ -336,12 +336,12 @@ function AddBtn({ onClick, accent }) {
 // ---- Modul 1: Jadual ----
 function JadualSection({ items, setItems, error }) {
   const accent = ACCENTS.jadual;
-  const [form, setForm] = useState({ jenis: "Kuliah", tajuk: "", hari: "Isnin", tarikh: "", masa: "" });
+  const [form, setForm] = useState({ jenis: "Kuliah", tajuk: "", hari: "Isnin", tarikh: "", masa: "", catatan: "" });
 
   const add = () => {
     if (!form.tajuk.trim()) return;
     setItems([{ id: uid(), ...form }, ...(items || [])]);
-    setForm({ ...form, tajuk: "", tarikh: "", masa: "" });
+    setForm({ ...form, tajuk: "", tarikh: "", masa: "", catatan: "" });
   };
   const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
   const list = items || [];
@@ -364,7 +364,8 @@ function JadualSection({ items, setItems, error }) {
         </select>
         <input value={form.tajuk} onChange={(e) => setForm({ ...form, tajuk: e.target.value })} placeholder="Kelas / lokasi" className={fieldCls} />
         <input type="date" value={form.tarikh} onChange={(e) => setForm({ ...form, tarikh: e.target.value })} className={fieldCls} />
-        <input type="time" value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} className={`${fieldCls} col-span-2 sm:col-span-1`} />
+        <input type="time" value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} className={fieldCls} />
+        <input value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={fieldCls} />
       </div>
       <AddBtn onClick={add} accent={accent} />
       {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
@@ -375,12 +376,15 @@ function JadualSection({ items, setItems, error }) {
       ) : (
         <ul className="space-y-1.5">
           {list.map((it) => (
-            <li key={it.id} className="flex items-center gap-3 rounded-xl bg-black/[0.02] px-3 py-2">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: accent.glow }} />
-              <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>{it.jenis}</span>
-              <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.tajuk}</span>
-              <span className="shrink-0 text-[12px] text-black/40">{it.hari}{it.tarikh ? ` · ${it.tarikh}` : ""}{it.masa ? `, ${it.masa}` : ""}</span>
-              <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+            <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
+              <div className="flex items-center gap-3">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: accent.glow }} />
+                <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>{it.jenis}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.tajuk}</span>
+                <span className="shrink-0 text-[12px] text-black/40">{it.hari}{it.tarikh ? ` · ${it.tarikh}` : ""}{it.masa ? `, ${it.masa}` : ""}</span>
+                <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+              </div>
+              {it.catatan && <p className="mt-1 pl-4 text-[12px] italic text-black/40">📝 {it.catatan}</p>}
             </li>
           ))}
         </ul>
@@ -392,7 +396,7 @@ function JadualSection({ items, setItems, error }) {
 // ---- Modul 2: Kelas Ganti ----
 function GantiSection({ items, setItems, error }) {
   const accent = ACCENTS.ganti;
-  const [form, setForm] = useState({ kelasAsal: "", tarikhAsal: "", masaAsal: "", sebab: "" });
+  const [form, setForm] = useState({ kelasAsal: "", tarikhAsal: "", masaAsal: "", sebab: "", catatan: "" });
   const [askingId, setAskingId] = useState(null); // id item yang sedang diminta tarikh & masa ganti
   const [dateDraft, setDateDraft] = useState("");
   const [timeDraft, setTimeDraft] = useState("");
@@ -400,7 +404,7 @@ function GantiSection({ items, setItems, error }) {
   const add = () => {
     if (!form.kelasAsal.trim()) return;
     setItems([{ id: uid(), ...form, tarikhGanti: "", masaGanti: "", selesai: false }, ...(items || [])]);
-    setForm({ kelasAsal: "", tarikhAsal: "", masaAsal: "", sebab: "" });
+    setForm({ kelasAsal: "", tarikhAsal: "", masaAsal: "", sebab: "", catatan: "" });
   };
   const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
   const list = items || [];
@@ -436,7 +440,8 @@ function GantiSection({ items, setItems, error }) {
         <input value={form.kelasAsal} onChange={(e) => setForm({ ...form, kelasAsal: e.target.value })} placeholder="Kelas / kursus" className={`${fieldCls} col-span-2 sm:col-span-2`} />
         <input type="date" value={form.tarikhAsal} onChange={(e) => setForm({ ...form, tarikhAsal: e.target.value })} className={fieldCls} />
         <input type="time" value={form.masaAsal} onChange={(e) => setForm({ ...form, masaAsal: e.target.value })} className={fieldCls} />
-        <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab tak jalan" className={`${fieldCls} col-span-2 sm:col-span-4`} />
+        <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab tak jalan" className={`${fieldCls} col-span-2 sm:col-span-2`} />
+        <input value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={`${fieldCls} col-span-2`} />
       </div>
       <AddBtn onClick={add} accent={accent} />
       {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
@@ -469,6 +474,7 @@ function GantiSection({ items, setItems, error }) {
                 </button>
                 <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
               </div>
+              {it.catatan && <p className="mt-1 text-[12px] italic text-black/40">📝 {it.catatan}</p>}
 
               {askingId === it.id && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-black/[0.06] bg-white px-2.5 py-2">
@@ -498,12 +504,12 @@ function GantiSection({ items, setItems, error }) {
 // ---- Modul 3: Ketidakhadiran ----
 function KetidakhadiranSection({ items, setItems, error }) {
   const accent = ACCENTS.hadir;
-  const [form, setForm] = useState({ nama: "", kelas: "", tarikh: "", masa: "", sebab: "", status: "Belum Disahkan" });
+  const [form, setForm] = useState({ nama: "", kelas: "", tarikh: "", masa: "", sebab: "", status: "Belum Disahkan", catatan: "" });
 
   const add = () => {
     if (!form.nama.trim()) return;
     setItems([{ id: uid(), ...form }, ...(items || [])]);
-    setForm({ nama: "", kelas: "", tarikh: "", masa: "", sebab: "", status: "Belum Disahkan" });
+    setForm({ nama: "", kelas: "", tarikh: "", masa: "", sebab: "", status: "Belum Disahkan", catatan: "" });
   };
   const cycleStatus = (id) => {
     const order = ["Belum Disahkan", "Disahkan", "Ditolak"];
@@ -527,7 +533,8 @@ function KetidakhadiranSection({ items, setItems, error }) {
         <input value={form.kelas} onChange={(e) => setForm({ ...form, kelas: e.target.value })} placeholder="Kelas" className={fieldCls} />
         <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab" className={fieldCls} />
         <input type="date" value={form.tarikh} onChange={(e) => setForm({ ...form, tarikh: e.target.value })} className={fieldCls} />
-        <input type="time" value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} className={`${fieldCls} col-span-2 sm:col-span-2`} />
+        <input type="time" value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} className={fieldCls} />
+        <input value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={fieldCls} />
       </div>
       <AddBtn onClick={add} accent={accent} />
       {error && <p className="mb-2 text-[12px] text-rose-600">{error}</p>}
@@ -538,17 +545,20 @@ function KetidakhadiranSection({ items, setItems, error }) {
       ) : (
         <ul className="space-y-1.5">
           {list.map((it) => (
-            <li key={it.id} className="flex items-center gap-3 rounded-xl bg-black/[0.02] px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] text-black/80">{it.nama} <span className="text-black/40">· {it.kelas}</span></p>
-                <p className="truncate text-[11.5px] text-black/40">{it.tarikh}{it.masa ? ` ${it.masa}` : ""}{it.sebab && ` · ${it.sebab}`}</p>
+            <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] text-black/80">{it.nama} <span className="text-black/40">· {it.kelas}</span></p>
+                  <p className="truncate text-[11.5px] text-black/40">{it.tarikh}{it.masa ? ` ${it.masa}` : ""}{it.sebab && ` · ${it.sebab}`}</p>
+                </div>
+                <button onClick={() => cycleStatus(it.id)}
+                  className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ backgroundColor: "white", color: statusColor[it.status], border: `1px solid ${statusColor[it.status]}40` }}>
+                  {it.status}
+                </button>
+                <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
               </div>
-              <button onClick={() => cycleStatus(it.id)}
-                className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                style={{ backgroundColor: "white", color: statusColor[it.status], border: `1px solid ${statusColor[it.status]}40` }}>
-                {it.status}
-              </button>
-              <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+              {it.catatan && <p className="mt-1 text-[12px] italic text-black/40">📝 {it.catatan}</p>}
             </li>
           ))}
         </ul>
@@ -561,7 +571,7 @@ function KetidakhadiranSection({ items, setItems, error }) {
 function PakaianSection({ items, setItems, error }) {
   const accent = ACCENTS.pakaian;
   const todayLabel = localDateStr(new Date());
-  const [form, setForm] = useState({ tarikh: todayLabel, konteks: "Kuliah", pakaian: "", foto: null });
+  const [form, setForm] = useState({ tarikh: todayLabel, konteks: "Kuliah", pakaian: "", foto: null, catatan: "" });
   const [uploading, setUploading] = useState(false);
   const [photoErr, setPhotoErr] = useState(null);
   const fileInputRef = React.useRef(null);
@@ -585,7 +595,7 @@ function PakaianSection({ items, setItems, error }) {
   const add = () => {
     if (!form.pakaian.trim()) return;
     setItems([{ id: uid(), ...form }, ...(items || [])]);
-    setForm({ ...form, pakaian: "", foto: null });
+    setForm({ ...form, pakaian: "", foto: null, catatan: "" });
   };
   const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
   const list = items || [];
@@ -606,6 +616,8 @@ function PakaianSection({ items, setItems, error }) {
           <option>Praktikum</option>
         </select>
         <input value={form.pakaian} onChange={(e) => setForm({ ...form, pakaian: e.target.value })} placeholder="Deskripsi pakaian"
+          className={`${fieldCls} min-w-[9rem] flex-1`} />
+        <input value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Catatan (pilihan)"
           className={`${fieldCls} min-w-[9rem] flex-1`} />
 
         <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
@@ -679,18 +691,21 @@ function PakaianSection({ items, setItems, error }) {
 
                 <ul className="space-y-1.5">
                   {weekItems.map((it) => (
-                    <li key={it.id} className="flex items-center gap-3 rounded-xl bg-black/[0.02] px-3 py-2">
-                      {it.foto ? (
-                        <img src={it.foto} alt="Pakaian" className="h-8 w-8 shrink-0 rounded-md object-cover" />
-                      ) : (
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-black/[0.03]">
-                          <ImageIcon size={13} className="text-black/20" />
-                        </div>
-                      )}
-                      <span className="w-20 shrink-0 text-[12px] text-black/40">{it.tarikh}</span>
-                      <span className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>{it.konteks}</span>
-                      <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.pakaian}</span>
-                      <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+                    <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
+                      <div className="flex items-center gap-3">
+                        {it.foto ? (
+                          <img src={it.foto} alt="Pakaian" className="h-8 w-8 shrink-0 rounded-md object-cover" />
+                        ) : (
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-black/[0.03]">
+                            <ImageIcon size={13} className="text-black/20" />
+                          </div>
+                        )}
+                        <span className="w-20 shrink-0 text-[12px] text-black/40">{it.tarikh}</span>
+                        <span className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>{it.konteks}</span>
+                        <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.pakaian}</span>
+                        <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+                      </div>
+                      {it.catatan && <p className="mt-1 pl-11 text-[12px] italic text-black/40">📝 {it.catatan}</p>}
                     </li>
                   ))}
                 </ul>
