@@ -472,10 +472,17 @@ function GantiSection({ items, setItems, error }) {
             <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
               <div className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] text-black/80">{it.kelasAsal}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="truncate text-[13px] text-black/80">{it.kelasAsal}</p>
+                    {it.tarikhAsal && (
+                      <span className="shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold" style={{ backgroundColor: accent.tint, color: accent.deep }}>
+                        📅 {it.tarikhAsal}{it.masaAsal ? ` · ${it.masaAsal}` : ""}
+                      </span>
+                    )}
+                  </div>
                   <p className="truncate text-[11.5px] text-black/40">
-                    {it.tarikhAsal && `Asal: ${it.tarikhAsal}`}{it.masaAsal && ` ${it.masaAsal}`}{it.sebab && ` · ${it.sebab}`}
-                    {it.selesai && it.tarikhGanti && ` · Ganti: ${it.tarikhGanti}`}{it.selesai && it.masaGanti && ` ${it.masaGanti}`}
+                    {it.sebab}
+                    {it.selesai && it.tarikhGanti && `${it.sebab ? " · " : ""}Ganti: ${it.tarikhGanti}`}{it.selesai && it.masaGanti && ` ${it.masaGanti}`}
                   </p>
                 </div>
                 <button
