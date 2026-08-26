@@ -150,8 +150,8 @@ const CSV_CONFIGS = {
   },
   pakaian: {
     filename: "meja-kerja-rekod-pakaian",
-    headers: ["Tarikh", "Konteks", "Pakaian", "Catatan"],
-    map: (it) => [it.tarikh, it.konteks, it.pakaian, it.catatan],
+    headers: ["Tarikh", "Konteks", "Label Lain", "Pakaian", "Catatan"],
+    map: (it) => [it.tarikh, it.konteks, it.labelLain, it.pakaian, it.catatan],
   },
 };
 
@@ -690,7 +690,7 @@ function KetidakhadiranSection({ items, setItems, error }) {
 function PakaianSection({ items, setItems, error }) {
   const accent = ACCENTS.pakaian;
   const todayLabel = localDateStr(new Date());
-  const [form, setForm] = useState({ tarikh: todayLabel, konteks: "Kuliah", pakaian: "", foto: null, catatan: "" });
+  const [form, setForm] = useState({ tarikh: todayLabel, konteks: "Kuliah", labelLain: "", pakaian: "", foto: null, catatan: "" });
   const [uploading, setUploading] = useState(false);
   const [photoErr, setPhotoErr] = useState(null);
   const fileInputRef = React.useRef(null);
@@ -714,7 +714,7 @@ function PakaianSection({ items, setItems, error }) {
   const add = () => {
     if (!form.pakaian.trim()) return;
     setItems([{ id: uid(), ...form }, ...(items || [])]);
-    setForm({ ...form, pakaian: "", foto: null, catatan: "" });
+    setForm({ ...form, pakaian: "", labelLain: "", foto: null, catatan: "" });
   };
   const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
   const list = items || [];
@@ -733,7 +733,12 @@ function PakaianSection({ items, setItems, error }) {
           <option>Kuliah</option>
           <option>Kelas Online</option>
           <option>Praktikum</option>
+          <option>Lain-lain</option>
         </select>
+        {form.konteks === "Lain-lain" && (
+          <input value={form.labelLain} onChange={(e) => setForm({ ...form, labelLain: e.target.value })}
+            placeholder="cth: Cuti, Hujung Minggu, Mesyuarat" className={fieldCls} />
+        )}
         <input value={form.pakaian} onChange={(e) => setForm({ ...form, pakaian: e.target.value })} placeholder="Deskripsi pakaian"
           className={`${fieldCls} min-w-[9rem] flex-1`} />
         <input value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Catatan (pilihan)"
@@ -820,7 +825,9 @@ function PakaianSection({ items, setItems, error }) {
                           </div>
                         )}
                         <span className="w-20 shrink-0 text-[12px] text-black/40">{it.tarikh}</span>
-                        <span className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>{it.konteks}</span>
+                        <span className="w-20 shrink-0 truncate text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>
+                          {it.konteks === "Lain-lain" && it.labelLain ? it.labelLain : it.konteks}
+                        </span>
                         <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.pakaian}</span>
                         <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
                       </div>
@@ -949,7 +956,7 @@ function RumusanSection({ jadual, ganti, hadir, pakaian }) {
   ganti.forEach((g) => { if (g.selesai && g.tarikhGanti) teachingEvents.push({ id: `g-${g.id}`, tarikh: g.tarikhGanti, jenis: "Kelas Ganti", tajuk: g.kelasAsal, masa: g.masaGanti, isGanti: true }); });
   teachingEvents.sort((a, b) => (a.tarikh < b.tarikh ? 1 : a.tarikh > b.tarikh ? -1 : 0));
 
-  const konteksList = ["Kuliah", "Kelas Online", "Praktikum"];
+  const konteksList = ["Kuliah", "Kelas Online", "Praktikum", "Lain-lain"];
   const pakaianByKonteks = konteksList.map((k) => ({ label: k, count: pakaian.filter((p) => p.konteks === k).length })).filter((k) => k.count > 0);
 
   const tiles = [
