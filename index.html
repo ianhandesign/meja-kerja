@@ -109,6 +109,23 @@ function localDateStr(d) {
   return `${y}-${m}-${day}`;
 }
 
+// ---- Format tempoh masa (cth "2:00 PM – 3:00 PM") ----
+// Input <type="time"> sentiasa pulangkan format 24-jam "HH:MM"; fungsi
+// ini tukar ke 12-jam untuk paparan sahaja, gabung mula+tamat jadi tempoh.
+function formatTime12(t) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+function formatTimeRange(mula, tamat) {
+  if (mula && tamat) return `${formatTime12(mula)} – ${formatTime12(tamat)}`;
+  if (mula) return formatTime12(mula);
+  if (tamat) return formatTime12(tamat);
+  return "";
+}
+
 // ---- Eksport CSV (buka terus dalam Apple Numbers / Excel) ----
 function toCSV(headers, rows) {
   const esc = (v) => {
@@ -135,18 +152,18 @@ function downloadCSV(filename, headers, rows) {
 const CSV_CONFIGS = {
   jadual: {
     filename: "meja-kerja-jadual",
-    headers: ["Jenis", "Kelas / Lokasi", "Hari", "Tarikh", "Masa", "Catatan"],
-    map: (it) => [it.jenis, it.tajuk, it.hari, it.tarikh, it.masa, it.catatan],
+    headers: ["Jenis", "Kelas / Lokasi", "Hari", "Tarikh", "Masa Mula", "Masa Tamat", "Catatan"],
+    map: (it) => [it.jenis, it.tajuk, it.hari, it.tarikh, it.masaMula, it.masaTamat, it.catatan],
   },
   ganti: {
     filename: "meja-kerja-kelas-ganti",
-    headers: ["Kelas / Kursus", "Tarikh Asal", "Masa Asal", "Sebab", "Tarikh Ganti", "Masa Ganti", "Status", "Catatan"],
-    map: (it) => [it.kelasAsal, it.tarikhAsal, it.masaAsal, it.sebab, it.tarikhGanti, it.masaGanti, it.selesai ? "Sudah Diganti" : "Belum Diganti", it.catatan],
+    headers: ["Kelas / Kursus", "Tarikh Asal", "Masa Mula Asal", "Masa Tamat Asal", "Sebab", "Tarikh Ganti", "Masa Mula Ganti", "Masa Tamat Ganti", "Status", "Catatan"],
+    map: (it) => [it.kelasAsal, it.tarikhAsal, it.masaMulaAsal, it.masaTamatAsal, it.sebab, it.tarikhGanti, it.masaMulaGanti, it.masaTamatGanti, it.selesai ? "Sudah Diganti" : "Belum Diganti", it.catatan],
   },
   hadir: {
     filename: "meja-kerja-ketidakhadiran",
-    headers: ["Nama Pelajar", "Kelas", "Tarikh", "Masa", "Sebab", "Status", "Catatan", "Nama Dokumen"],
-    map: (it) => [it.nama, it.kelas, it.tarikh, it.masa, it.sebab, it.status, it.catatan, it.dokumenNama],
+    headers: ["Nama Pelajar", "Kelas", "Tarikh", "Masa Mula", "Masa Tamat", "Sebab", "Status", "Catatan", "Nama Dokumen"],
+    map: (it) => [it.nama, it.kelas, it.tarikh, it.masaMula, it.masaTamat, it.sebab, it.status, it.catatan, it.dokumenNama],
   },
   pakaian: {
     filename: "meja-kerja-rekod-pakaian",
@@ -353,15 +370,27 @@ function AddBtn({ onClick, accent }) {
 // ---- Modul 1: Jadual ----
 function JadualSection({ items, setItems, error }) {
   const accent = ACCENTS.jadual;
-  const [form, setForm] = useState({ jenis: "Kuliah", tajuk: "", hari: "Isnin", tarikh: "", masa: "", catatan: "" });
+  const JADUAL_KOSONG = { jenis: "Kuliah", tajuk: "", hari: "Isnin", tarikh: "", masaMula: "", masaTamat: "", catatan: "" };
+  const [form, setForm] = useState(JADUAL_KOSONG);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
 
   const add = () => {
     if (!form.tajuk.trim()) return;
     setItems([{ id: uid(), ...form }, ...(items || [])]);
-    setForm({ ...form, tajuk: "", tarikh: "", masa: "", catatan: "" });
+    setForm(JADUAL_KOSONG);
   };
   const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
   const list = items || [];
+
+  const startEdit = (it) => { setEditingId(it.id); setEditForm({ ...it }); };
+  const cancelEdit = () => { setEditingId(null); setEditForm(null); };
+  const saveEdit = () => {
+    if (!editForm.tajuk.trim()) return;
+    setItems(list.map((i) => (i.id === editingId ? { ...editForm } : i)));
+    setEditingId(null);
+    setEditForm(null);
+  };
 
   return (
     <SectionShell id="jadual" accent={accent} icon={Calendar} tag="Jadual"
@@ -381,7 +410,11 @@ function JadualSection({ items, setItems, error }) {
         </select>
         <input value={form.tajuk} onChange={(e) => setForm({ ...form, tajuk: e.target.value })} placeholder="Kelas / lokasi" className={fieldCls} />
         <input type="date" value={form.tarikh} onChange={(e) => setForm({ ...form, tarikh: e.target.value })} className={fieldCls} />
-        <input type="time" value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} className={fieldCls} />
+        <div className="flex items-center gap-1.5">
+          <input type="time" value={form.masaMula} onChange={(e) => setForm({ ...form, masaMula: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+          <span className="shrink-0 text-[12px] text-black/30">hingga</span>
+          <input type="time" value={form.masaTamat} onChange={(e) => setForm({ ...form, masaTamat: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+        </div>
         <input value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={fieldCls} />
       </div>
       <AddBtn onClick={add} accent={accent} />
@@ -392,18 +425,51 @@ function JadualSection({ items, setItems, error }) {
         <EmptyRow text="Belum ada entri jadual." />
       ) : (
         <ul className="space-y-1.5">
-          {list.map((it) => (
-            <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
-              <div className="flex items-center gap-3">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: accent.glow }} />
-                <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>{it.jenis}</span>
-                <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.tajuk}</span>
-                <span className="shrink-0 text-[12px] text-black/40">{it.hari}{it.tarikh ? ` · ${it.tarikh}` : ""}{it.masa ? `, ${it.masa}` : ""}</span>
-                <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
-              </div>
-              {it.catatan && <p className="mt-1 pl-4 text-[12px] italic text-black/40">📝 {it.catatan}</p>}
-            </li>
-          ))}
+          {list.map((it) =>
+            editingId === it.id ? (
+              <li key={it.id} className="rounded-xl border border-black/[0.08] bg-white px-3 py-3">
+                <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <select value={editForm.jenis} onChange={(e) => setEditForm({ ...editForm, jenis: e.target.value })} className={fieldCls}>
+                    <option>Kuliah</option>
+                    <option>Kelas Online</option>
+                    <option>Praktikum</option>
+                    <option>Penilaian Praktikum</option>
+                  </select>
+                  <select value={editForm.hari} onChange={(e) => setEditForm({ ...editForm, hari: e.target.value })} className={fieldCls}>
+                    {["Isnin","Selasa","Rabu","Khamis","Jumaat","Sabtu","Ahad"].map((h) => <option key={h}>{h}</option>)}
+                  </select>
+                  <input value={editForm.tajuk} onChange={(e) => setEditForm({ ...editForm, tajuk: e.target.value })} placeholder="Kelas / lokasi" className={fieldCls} />
+                  <input type="date" value={editForm.tarikh} onChange={(e) => setEditForm({ ...editForm, tarikh: e.target.value })} className={fieldCls} />
+                  <div className="flex items-center gap-1.5">
+                    <input type="time" value={editForm.masaMula} onChange={(e) => setEditForm({ ...editForm, masaMula: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+                    <span className="shrink-0 text-[12px] text-black/30">–</span>
+                    <input type="time" value={editForm.masaTamat} onChange={(e) => setEditForm({ ...editForm, masaTamat: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+                  </div>
+                  <input value={editForm.catatan} onChange={(e) => setEditForm({ ...editForm, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={fieldCls} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={saveEdit} className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-white" style={{ backgroundColor: accent.mid }}>
+                    Simpan
+                  </button>
+                  <button onClick={cancelEdit} className="rounded-full px-3 py-1.5 text-[12px] font-medium text-black/40 hover:bg-black/5">
+                    Batal
+                  </button>
+                </div>
+              </li>
+            ) : (
+              <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
+                <div className="flex items-center gap-3">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: accent.glow }} />
+                  <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent.mid }}>{it.jenis}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.tajuk}</span>
+                  <span className="shrink-0 text-[12px] text-black/40">{it.hari}{it.tarikh ? ` · ${it.tarikh}` : ""}{formatTimeRange(it.masaMula, it.masaTamat) ? `, ${formatTimeRange(it.masaMula, it.masaTamat)}` : ""}</span>
+                  <IconBtn onClick={() => startEdit(it)} label="Edit"><Pencil size={13} /></IconBtn>
+                  <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
+                </div>
+                {it.catatan && <p className="mt-1 pl-4 text-[12px] italic text-black/40">📝 {it.catatan}</p>}
+              </li>
+            )
+          )}
         </ul>
       )}
     </SectionShell>
@@ -413,18 +479,30 @@ function JadualSection({ items, setItems, error }) {
 // ---- Modul 2: Kelas Ganti ----
 function GantiSection({ items, setItems, error }) {
   const accent = ACCENTS.ganti;
-  const [form, setForm] = useState({ kelasAsal: "", tarikhAsal: "", masaAsal: "", sebab: "", catatan: "" });
+  const [form, setForm] = useState({ kelasAsal: "", tarikhAsal: "", masaMulaAsal: "", masaTamatAsal: "", sebab: "", catatan: "" });
   const [askingId, setAskingId] = useState(null); // id item yang sedang diminta tarikh & masa ganti
   const [dateDraft, setDateDraft] = useState("");
-  const [timeDraft, setTimeDraft] = useState("");
+  const [timeMulaDraft, setTimeMulaDraft] = useState("");
+  const [timeTamatDraft, setTimeTamatDraft] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
 
   const add = () => {
     if (!form.kelasAsal.trim()) return;
-    setItems([{ id: uid(), ...form, tarikhGanti: "", masaGanti: "", selesai: false }, ...(items || [])]);
-    setForm({ kelasAsal: "", tarikhAsal: "", masaAsal: "", sebab: "", catatan: "" });
+    setItems([{ id: uid(), ...form, tarikhGanti: "", masaMulaGanti: "", masaTamatGanti: "", selesai: false }, ...(items || [])]);
+    setForm({ kelasAsal: "", tarikhAsal: "", masaMulaAsal: "", masaTamatAsal: "", sebab: "", catatan: "" });
   };
   const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
   const list = items || [];
+
+  const startEdit = (it) => { setEditingId(it.id); setEditForm({ ...it }); };
+  const cancelEdit = () => { setEditingId(null); setEditForm(null); };
+  const saveEdit = () => {
+    if (!editForm.kelasAsal.trim()) return;
+    setItems(list.map((i) => (i.id === editingId ? { ...editForm } : i)));
+    setEditingId(null);
+    setEditForm(null);
+  };
 
   // Tekan status "Belum Diganti" -> minta tarikh & masa dahulu sebelum tanda selesai.
   // Tekan status "Sudah Diganti" -> terus kembali ke belum (tiada perlu tanya apa-apa).
@@ -435,17 +513,19 @@ function GantiSection({ items, setItems, error }) {
     }
     setAskingId(it.id);
     setDateDraft(it.tarikhGanti || localDateStr(new Date()));
-    setTimeDraft(it.masaGanti || "");
+    setTimeMulaDraft(it.masaMulaGanti || "");
+    setTimeTamatDraft(it.masaTamatGanti || "");
   };
 
   const confirmDate = (id) => {
     if (!dateDraft) return;
-    setItems(list.map((i) => (i.id === id ? { ...i, tarikhGanti: dateDraft, masaGanti: timeDraft, selesai: true } : i)));
+    setItems(list.map((i) => (i.id === id ? { ...i, tarikhGanti: dateDraft, masaMulaGanti: timeMulaDraft, masaTamatGanti: timeTamatDraft, selesai: true } : i)));
     setAskingId(null);
     setDateDraft("");
-    setTimeDraft("");
+    setTimeMulaDraft("");
+    setTimeTamatDraft("");
   };
-  const cancelAsk = () => { setAskingId(null); setDateDraft(""); setTimeDraft(""); };
+  const cancelAsk = () => { setAskingId(null); setDateDraft(""); setTimeMulaDraft(""); setTimeTamatDraft(""); };
 
   return (
     <SectionShell id="ganti" accent={accent} icon={RefreshCw} tag="Ganti"
@@ -456,7 +536,11 @@ function GantiSection({ items, setItems, error }) {
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <input value={form.kelasAsal} onChange={(e) => setForm({ ...form, kelasAsal: e.target.value })} placeholder="Kelas / kursus" className={`${fieldCls} col-span-2 sm:col-span-2`} />
         <input type="date" value={form.tarikhAsal} onChange={(e) => setForm({ ...form, tarikhAsal: e.target.value })} className={fieldCls} />
-        <input type="time" value={form.masaAsal} onChange={(e) => setForm({ ...form, masaAsal: e.target.value })} className={fieldCls} />
+        <div className="flex items-center gap-1.5">
+          <input type="time" value={form.masaMulaAsal} onChange={(e) => setForm({ ...form, masaMulaAsal: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+          <span className="shrink-0 text-[12px] text-black/30">–</span>
+          <input type="time" value={form.masaTamatAsal} onChange={(e) => setForm({ ...form, masaTamatAsal: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+        </div>
         <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab tak jalan" className={`${fieldCls} col-span-2 sm:col-span-2`} />
         <input value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={`${fieldCls} col-span-2`} />
       </div>
@@ -468,7 +552,31 @@ function GantiSection({ items, setItems, error }) {
         <EmptyRow text="Tiada kelas ganti direkod." />
       ) : (
         <ul className="space-y-1.5">
-          {list.map((it) => (
+          {list.map((it) =>
+            editingId === it.id ? (
+              <li key={it.id} className="rounded-xl border border-black/[0.08] bg-white px-3 py-3">
+                <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <input value={editForm.kelasAsal} onChange={(e) => setEditForm({ ...editForm, kelasAsal: e.target.value })} placeholder="Kelas / kursus" className={`${fieldCls} col-span-2 sm:col-span-2`} />
+                  <input type="date" value={editForm.tarikhAsal} onChange={(e) => setEditForm({ ...editForm, tarikhAsal: e.target.value })} className={fieldCls} />
+                  <div className="flex items-center gap-1.5">
+                    <input type="time" value={editForm.masaMulaAsal} onChange={(e) => setEditForm({ ...editForm, masaMulaAsal: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+                    <span className="shrink-0 text-[12px] text-black/30">–</span>
+                    <input type="time" value={editForm.masaTamatAsal} onChange={(e) => setEditForm({ ...editForm, masaTamatAsal: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+                  </div>
+                  <input value={editForm.sebab} onChange={(e) => setEditForm({ ...editForm, sebab: e.target.value })} placeholder="Sebab tak jalan" className={`${fieldCls} col-span-2 sm:col-span-2`} />
+                  <input value={editForm.catatan} onChange={(e) => setEditForm({ ...editForm, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={`${fieldCls} col-span-2`} />
+                </div>
+                <p className="mb-2 text-[11px] text-black/35">Nota: tarikh &amp; masa kelas ganti (bila selesai) diedit melalui butang status "Sudah/Belum Diganti", bukan di sini.</p>
+                <div className="flex items-center gap-2">
+                  <button onClick={saveEdit} className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-white" style={{ backgroundColor: accent.mid }}>
+                    Simpan
+                  </button>
+                  <button onClick={cancelEdit} className="rounded-full px-3 py-1.5 text-[12px] font-medium text-black/40 hover:bg-black/5">
+                    Batal
+                  </button>
+                </div>
+              </li>
+            ) : (
             <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
               <div className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
@@ -476,13 +584,14 @@ function GantiSection({ items, setItems, error }) {
                     <p className="truncate text-[13px] text-black/80">{it.kelasAsal}</p>
                     {it.tarikhAsal && (
                       <span className="shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold" style={{ backgroundColor: accent.tint, color: accent.deep }}>
-                        📅 {it.tarikhAsal}{it.masaAsal ? ` · ${it.masaAsal}` : ""}
+                        📅 {it.tarikhAsal}{formatTimeRange(it.masaMulaAsal, it.masaTamatAsal) ? ` · ${formatTimeRange(it.masaMulaAsal, it.masaTamatAsal)}` : ""}
                       </span>
                     )}
                   </div>
                   <p className="truncate text-[11.5px] text-black/40">
                     {it.sebab}
-                    {it.selesai && it.tarikhGanti && `${it.sebab ? " · " : ""}Ganti: ${it.tarikhGanti}`}{it.selesai && it.masaGanti && ` ${it.masaGanti}`}
+                    {it.selesai && it.tarikhGanti && `${it.sebab ? " · " : ""}Ganti: ${it.tarikhGanti}`}
+                    {it.selesai && formatTimeRange(it.masaMulaGanti, it.masaTamatGanti) && ` ${formatTimeRange(it.masaMulaGanti, it.masaTamatGanti)}`}
                   </p>
                 </div>
                 <button
@@ -496,6 +605,7 @@ function GantiSection({ items, setItems, error }) {
                 >
                   {it.selesai ? "Sudah Diganti" : "Belum Diganti"}
                 </button>
+                <IconBtn onClick={() => startEdit(it)} label="Edit"><Pencil size={13} /></IconBtn>
                 <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
               </div>
               {it.catatan && <p className="mt-1 text-[12px] italic text-black/40">📝 {it.catatan}</p>}
@@ -505,7 +615,10 @@ function GantiSection({ items, setItems, error }) {
                   <span className="text-[11.5px] text-black/50">Bila kelas ini diganti?</span>
                   <input type="date" value={dateDraft} onChange={(e) => setDateDraft(e.target.value)}
                     className="rounded-md border border-black/10 px-2 py-1 text-[12.5px]" />
-                  <input type="time" value={timeDraft} onChange={(e) => setTimeDraft(e.target.value)}
+                  <input type="time" value={timeMulaDraft} onChange={(e) => setTimeMulaDraft(e.target.value)}
+                    className="rounded-md border border-black/10 px-2 py-1 text-[12.5px]" />
+                  <span className="text-[11.5px] text-black/30">hingga</span>
+                  <input type="time" value={timeTamatDraft} onChange={(e) => setTimeTamatDraft(e.target.value)}
                     className="rounded-md border border-black/10 px-2 py-1 text-[12.5px]" />
                   <button onClick={() => confirmDate(it.id)}
                     className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold text-white"
@@ -518,7 +631,8 @@ function GantiSection({ items, setItems, error }) {
                 </div>
               )}
             </li>
-          ))}
+            )
+          )}
         </ul>
       )}
     </SectionShell>
@@ -526,7 +640,7 @@ function GantiSection({ items, setItems, error }) {
 }
 
 // ---- Modul 3: Ketidakhadiran ----
-const KETIDAKHADIRAN_KOSONG = { nama: "", kelas: "", tarikh: "", masa: "", sebab: "", status: "Belum Disahkan", catatan: "", dokumenPdf: null, dokumenNama: "" };
+const KETIDAKHADIRAN_KOSONG = { nama: "", kelas: "", tarikh: "", masaMula: "", masaTamat: "", sebab: "", status: "Belum Disahkan", catatan: "", dokumenPdf: null, dokumenNama: "" };
 
 function KetidakhadiranSection({ items, setItems, error }) {
   const accent = ACCENTS.hadir;
@@ -590,7 +704,11 @@ function KetidakhadiranSection({ items, setItems, error }) {
         <input value={form.kelas} onChange={(e) => setForm({ ...form, kelas: e.target.value })} placeholder="Kelas" className={fieldCls} />
         <input value={form.sebab} onChange={(e) => setForm({ ...form, sebab: e.target.value })} placeholder="Sebab" className={fieldCls} />
         <input type="date" value={form.tarikh} onChange={(e) => setForm({ ...form, tarikh: e.target.value })} className={fieldCls} />
-        <input type="time" value={form.masa} onChange={(e) => setForm({ ...form, masa: e.target.value })} className={fieldCls} />
+        <div className="flex items-center gap-1.5">
+          <input type="time" value={form.masaMula} onChange={(e) => setForm({ ...form, masaMula: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+          <span className="shrink-0 text-[12px] text-black/30">–</span>
+          <input type="time" value={form.masaTamat} onChange={(e) => setForm({ ...form, masaTamat: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+        </div>
         <input value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={fieldCls} />
       </div>
 
@@ -628,7 +746,11 @@ function KetidakhadiranSection({ items, setItems, error }) {
                   <input value={editForm.kelas} onChange={(e) => setEditForm({ ...editForm, kelas: e.target.value })} placeholder="Kelas" className={fieldCls} />
                   <input value={editForm.sebab} onChange={(e) => setEditForm({ ...editForm, sebab: e.target.value })} placeholder="Sebab" className={fieldCls} />
                   <input type="date" value={editForm.tarikh} onChange={(e) => setEditForm({ ...editForm, tarikh: e.target.value })} className={fieldCls} />
-                  <input type="time" value={editForm.masa} onChange={(e) => setEditForm({ ...editForm, masa: e.target.value })} className={fieldCls} />
+                  <div className="flex items-center gap-1.5">
+                    <input type="time" value={editForm.masaMula} onChange={(e) => setEditForm({ ...editForm, masaMula: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+                    <span className="shrink-0 text-[12px] text-black/30">–</span>
+                    <input type="time" value={editForm.masaTamat} onChange={(e) => setEditForm({ ...editForm, masaTamat: e.target.value })} className={`${fieldCls} min-w-0 flex-1`} />
+                  </div>
                   <input value={editForm.catatan} onChange={(e) => setEditForm({ ...editForm, catatan: e.target.value })} placeholder="Catatan (pilihan)" className={fieldCls} />
                 </div>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -662,7 +784,7 @@ function KetidakhadiranSection({ items, setItems, error }) {
                 <div className="flex items-center gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] text-black/80">{it.nama} <span className="text-black/40">· {it.kelas}</span></p>
-                    <p className="truncate text-[11.5px] text-black/40">{it.tarikh}{it.masa ? ` ${it.masa}` : ""}{it.sebab && ` · ${it.sebab}`}</p>
+                    <p className="truncate text-[11.5px] text-black/40">{it.tarikh}{formatTimeRange(it.masaMula, it.masaTamat) ? ` ${formatTimeRange(it.masaMula, it.masaTamat)}` : ""}{it.sebab && ` · ${it.sebab}`}</p>
                   </div>
                   <button onClick={() => cycleStatus(it.id)}
                     className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
@@ -701,6 +823,10 @@ function PakaianSection({ items, setItems, error }) {
   const [uploading, setUploading] = useState(false);
   const [photoErr, setPhotoErr] = useState(null);
   const fileInputRef = React.useRef(null);
+  const editFileInputRef = React.useRef(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editUploading, setEditUploading] = useState(false);
 
   const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
@@ -718,6 +844,22 @@ function PakaianSection({ items, setItems, error }) {
     }
   };
 
+  const handleEditPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setEditUploading(true);
+    setPhotoErr(null);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      setEditForm((f) => ({ ...f, foto: dataUrl }));
+    } catch {
+      setPhotoErr("Gagal proses gambar. Cuba lagi.");
+    } finally {
+      setEditUploading(false);
+    }
+  };
+
   const add = () => {
     if (!form.pakaian.trim()) return;
     setItems([{ id: uid(), ...form }, ...(items || [])]);
@@ -726,6 +868,15 @@ function PakaianSection({ items, setItems, error }) {
   const remove = (id) => setItems((items || []).filter((i) => i.id !== id));
   const list = items || [];
   const weeks = groupByWeek(list);
+
+  const startEdit = (it) => { setEditingId(it.id); setEditForm({ ...it }); setPhotoErr(null); };
+  const cancelEdit = () => { setEditingId(null); setEditForm(null); setPhotoErr(null); };
+  const saveEdit = () => {
+    if (!editForm.pakaian.trim()) return;
+    setItems(list.map((i) => (i.id === editingId ? { ...editForm } : i)));
+    setEditingId(null);
+    setEditForm(null);
+  };
 
   return (
     <SectionShell id="pakaian" accent={accent} icon={Shirt} tag="Pakaian"
@@ -821,7 +972,53 @@ function PakaianSection({ items, setItems, error }) {
                 </div>
 
                 <ul className="space-y-1.5">
-                  {weekItems.map((it) => (
+                  {weekItems.map((it) =>
+                    editingId === it.id ? (
+                      <li key={it.id} className="rounded-xl border border-black/[0.08] bg-white px-3 py-3">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <input type="date" value={editForm.tarikh} onChange={(e) => setEditForm({ ...editForm, tarikh: e.target.value })} className={fieldCls} />
+                          <select value={editForm.konteks} onChange={(e) => setEditForm({ ...editForm, konteks: e.target.value })} className={fieldCls}>
+                            <option>Kuliah</option>
+                            <option>Kelas Online</option>
+                            <option>Praktikum</option>
+                            <option>Lain-lain</option>
+                          </select>
+                          {editForm.konteks === "Lain-lain" && (
+                            <input value={editForm.labelLain} onChange={(e) => setEditForm({ ...editForm, labelLain: e.target.value })}
+                              placeholder="cth: Cuti, Hujung Minggu, Mesyuarat" className={fieldCls} />
+                          )}
+                          <input value={editForm.pakaian} onChange={(e) => setEditForm({ ...editForm, pakaian: e.target.value })} placeholder="Deskripsi pakaian"
+                            className={`${fieldCls} min-w-[9rem] flex-1`} />
+                          <input value={editForm.catatan} onChange={(e) => setEditForm({ ...editForm, catatan: e.target.value })} placeholder="Catatan (pilihan)"
+                            className={`${fieldCls} min-w-[9rem] flex-1`} />
+                        </div>
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <input ref={editFileInputRef} type="file" accept="image/*" capture="environment" onChange={handleEditPhoto} className="hidden" />
+                          <button type="button" onClick={() => editFileInputRef.current?.click()} disabled={editUploading}
+                            className="flex items-center gap-1.5 rounded-lg border border-black/[0.09] bg-white px-2.5 py-2 text-[12.5px] font-medium text-black/60 transition hover:bg-black/[0.03] disabled:opacity-50">
+                            <Camera size={14} /> {editUploading ? "Memproses…" : editForm.foto ? "Tukar Gambar" : "Ambil Gambar"}
+                          </button>
+                          {editForm.foto && (
+                            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-black/10">
+                              <img src={editForm.foto} alt="Pratonton pakaian" className="h-full w-full object-cover" />
+                              <button type="button" onClick={() => setEditForm((f) => ({ ...f, foto: null }))} aria-label="Buang gambar"
+                                className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 transition hover:opacity-100">
+                                <X size={14} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {photoErr && <p className="mb-2 text-[12px] text-rose-600">{photoErr}</p>}
+                        <div className="flex items-center gap-2">
+                          <button onClick={saveEdit} className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-white" style={{ backgroundColor: accent.mid }}>
+                            Simpan
+                          </button>
+                          <button onClick={cancelEdit} className="rounded-full px-3 py-1.5 text-[12px] font-medium text-black/40 hover:bg-black/5">
+                            Batal
+                          </button>
+                        </div>
+                      </li>
+                    ) : (
                     <li key={it.id} className="rounded-xl bg-black/[0.02] px-3 py-2">
                       <div className="flex items-center gap-3">
                         {it.foto ? (
@@ -836,11 +1033,13 @@ function PakaianSection({ items, setItems, error }) {
                           {it.konteks === "Lain-lain" && it.labelLain ? it.labelLain : it.konteks}
                         </span>
                         <span className="min-w-0 flex-1 truncate text-[13px] text-black/80">{it.pakaian}</span>
+                        <IconBtn onClick={() => startEdit(it)} label="Edit"><Pencil size={13} /></IconBtn>
                         <IconBtn onClick={() => remove(it.id)} label="Buang"><X size={14} /></IconBtn>
                       </div>
                       {it.catatan && <p className="mt-1 pl-11 text-[12px] italic text-black/40">📝 {it.catatan}</p>}
                     </li>
-                  ))}
+                    )
+                  )}
                 </ul>
               </div>
             );
@@ -959,8 +1158,8 @@ function RumusanSection({ jadual, ganti, hadir, pakaian }) {
   pakaian.forEach((p) => { if (p.tarikh) (pakaianByDate[p.tarikh] = pakaianByDate[p.tarikh] || []).push(p); });
 
   const teachingEvents = [];
-  jadual.forEach((j) => { if (j.tarikh) teachingEvents.push({ id: `j-${j.id}`, tarikh: j.tarikh, jenis: j.jenis, tajuk: j.tajuk, masa: j.masa, isGanti: false }); });
-  ganti.forEach((g) => { if (g.selesai && g.tarikhGanti) teachingEvents.push({ id: `g-${g.id}`, tarikh: g.tarikhGanti, jenis: "Kelas Ganti", tajuk: g.kelasAsal, masa: g.masaGanti, isGanti: true }); });
+  jadual.forEach((j) => { if (j.tarikh) teachingEvents.push({ id: `j-${j.id}`, tarikh: j.tarikh, jenis: j.jenis, tajuk: j.tajuk, masa: formatTimeRange(j.masaMula, j.masaTamat), isGanti: false }); });
+  ganti.forEach((g) => { if (g.selesai && g.tarikhGanti) teachingEvents.push({ id: `g-${g.id}`, tarikh: g.tarikhGanti, jenis: "Kelas Ganti", tajuk: g.kelasAsal, masa: formatTimeRange(g.masaMulaGanti, g.masaTamatGanti), isGanti: true }); });
   teachingEvents.sort((a, b) => (a.tarikh < b.tarikh ? 1 : a.tarikh > b.tarikh ? -1 : 0));
 
   const konteksList = ["Kuliah", "Kelas Online", "Praktikum", "Lain-lain"];
